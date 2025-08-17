@@ -1,0 +1,56 @@
+# YAML Lint Configuration for Security-focused Scanning
+extends: default
+
+rules:
+  # Disable line length check for encrypted vault content
+  line-length:
+    max: 200
+    level: warning
+    
+  # Allow long lines in comments (for documentation)
+  comments:
+    min-spaces-from-content: 1
+    
+  # Ensure consistent indentation for readability
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+    
+  # Require document start markers for clarity
+  document-start:
+    present: true
+    
+  # Allow trailing spaces in encrypted content
+  trailing-spaces:
+    level: warning
+    
+  # Ensure proper key ordering for consistency
+  key-ordering: disable
+  
+  # Allow empty values (common in templates)
+  empty-values:
+    forbid-in-block-mappings: false
+    forbid-in-flow-mappings: false
+    
+  # Ensure quotes are used consistently
+  quoted-strings:
+    quote-type: double
+    required: only-when-needed
+    
+  # Allow long lines in certain contexts
+  comments-indentation: disable
+  
+  # Security-focused rules
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
+    check-keys: true
+
+# Ignore files that may contain encrypted content
+ignore: |
+  vault*.yml
+  **/vault*.yml
+  **/*vault*.yml
+  .secrets.baseline
+  *.enc
+  *.encrypted

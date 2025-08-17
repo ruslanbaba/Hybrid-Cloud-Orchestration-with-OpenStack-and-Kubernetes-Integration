@@ -1,0 +1,325 @@
+name: Security Scanning and Compliance
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run daily security scan at 2 AM UTC
+    - cron: '0 2 * * *'
+
+jobs:
+  secret-scanning:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog OSS
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: GitGuardian scan
+        uses: GitGuardian/ggshield-action@v1.24.0
+        env:
+          GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+          GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
+      - name: Detect Secrets
+        uses: reviewdog/action-detect-secrets@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          detect_secrets_flags: --all-files --force-use-all-plugins
+
+  vulnerability-scanning:
+    name: Vulnerability Assessment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner in fs mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Snyk to check for vulnerabilities
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  infrastructure-security:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov
+        id: checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: .
+          framework: terraform,kubernetes,dockerfile,secrets
+          output_format: sarif
+          output_file_path: checkov-results.sarif
+
+      - name: Upload Checkov scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: checkov-results.sarif
+
+      - name: Terraform Security Scan
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          soft_fail: true
+
+      - name: Kubernetes Security Scan
+        uses: azure/k8s-lint@v1
+        with:
+          manifests: |
+            kubernetes/
+
+  container-security:
+    name: Container Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker images for scanning
+        run: |
+          # Build any Dockerfiles found for scanning
+          find . -name "Dockerfile*" -exec dirname {} \; | sort -u | while read dir; do
+            if [ -f "$dir/Dockerfile" ]; then
+              echo "Building image from $dir"
+              docker build -t "security-scan:$(basename $dir)" "$dir" || true
+            fi
+          done
+
+      - name: Run Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'security-scan:*'
+          format: 'sarif'
+          output: 'container-results.sarif'
+
+      - name: Upload container scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'container-results.sarif'
+
+  dependency-scanning:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pip install safety bandit
+
+      - name: Run Safety check
+        run: |
+          if [ -f requirements.txt ]; then
+            safety check -r requirements.txt --json --output safety-report.json || true
+          fi
+
+      - name: Run Bandit security scan
+        run: |
+          find . -name "*.py" -type f | head -1 > /dev/null && bandit -r . -f json -o bandit-report.json || echo "No Python files found"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Node.js dependencies and audit
+        run: |
+          if [ -f package.json ]; then
+            npm install
+            npm audit --audit-level=high --json > npm-audit.json || true
+          fi
+
+  compliance-check:
+    name: Compliance and Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check Ansible Vault encryption
+        run: |
+          chmod +x scripts/check-vault-encryption.sh
+          scripts/check-vault-encryption.sh
+
+      - name: Check Kubernetes secrets
+        run: |
+          chmod +x scripts/check-k8s-secrets.sh
+          scripts/check-k8s-secrets.sh
+
+      - name: Check Terraform secrets
+        run: |
+          chmod +x scripts/check-terraform-secrets.sh
+          scripts/check-terraform-secrets.sh
+
+      - name: Open Policy Agent - Conftest
+        uses: instrumenta/conftest-action@master
+        with:
+          files: kubernetes/
+
+      - name: YAML Lint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: .
+          config_file: .yamllint.yml
+
+  security-report:
+    name: Generate Security Report
+    needs: [secret-scanning, vulnerability-scanning, infrastructure-security, container-security, dependency-scanning, compliance-check]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate Security Summary
+        run: |
+          echo "# Security Scan Summary - $(date)" > security-summary.md
+          echo "" >> security-summary.md
+          echo "## Scan Results" >> security-summary.md
+          echo "- Secret Scanning: ${{ needs.secret-scanning.result }}" >> security-summary.md
+          echo "- Vulnerability Assessment: ${{ needs.vulnerability-scanning.result }}" >> security-summary.md
+          echo "- Infrastructure Security: ${{ needs.infrastructure-security.result }}" >> security-summary.md
+          echo "- Container Security: ${{ needs.container-security.result }}" >> security-summary.md
+          echo "- Dependency Scanning: ${{ needs.dependency-scanning.result }}" >> security-summary.md
+          echo "- Compliance Check: ${{ needs.compliance-check.result }}" >> security-summary.md
+          echo "" >> security-summary.md
+          echo "## Recommendations" >> security-summary.md
+          echo "- Review all failed checks and remediate issues" >> security-summary.md
+          echo "- Update dependencies to latest secure versions" >> security-summary.md
+          echo "- Ensure all secrets are properly encrypted" >> security-summary.md
+          echo "- Follow security best practices documentation" >> security-summary.md
+
+      - name: Upload Security Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report-${{ github.run_number }}
+          path: security-summary.md
+
+      - name: Comment Security Summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+  notify-security-team:
+    name: Notify Security Team
+    needs: [secret-scanning, vulnerability-scanning, infrastructure-security, container-security, dependency-scanning, compliance-check]
+    runs-on: ubuntu-latest
+    if: failure()
+    steps:
+      - name: Send Slack notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: 'Security scan failed in ${{ github.repository }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Create security issue
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Security Scan Failed - ' + new Date().toISOString().split('T')[0],
+              body: 'Automated security scan detected issues. Please review the workflow results and take appropriate action.\n\nWorkflow: ' + context.workflow + '\nRun: ' + context.runNumber,
+              labels: ['security', 'urgent']
+            });
+
+  auto-remediation:
+    name: Automated Security Remediation
+    needs: [dependency-scanning]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Update Python dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install pip-tools
+            pip-compile --upgrade requirements.in
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Update Node.js dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm update
+            npm audit fix --force || true
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'security: automated dependency updates'
+          title: 'Automated Security Updates'
+          body: 'Automated security updates for dependencies'
+          branch: security/automated-updates
+          labels: security, dependencies

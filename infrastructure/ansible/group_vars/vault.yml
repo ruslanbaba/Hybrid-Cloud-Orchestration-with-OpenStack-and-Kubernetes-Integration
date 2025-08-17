@@ -132,56 +132,69 @@ vault_designate_rabbitmq_password: "DesignateRabbitMQ2025!"
 # ========================================
 # CLOUD PROVIDER CREDENTIALS
 # ========================================
+# SECURITY WARNING: Replace these placeholder values with actual encrypted credentials
+# Use: ansible-vault encrypt_string 'actual-credentials' --name 'variable_name'
 
-# AWS Credentials
-vault_aws_access_key_id: "AKIA1234567890ABCDEF"
-vault_aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+# AWS Credentials - ENCRYPTED PLACEHOLDERS
+vault_aws_access_key_id: "{{ vault_encrypted_aws_access_key }}"
+vault_aws_secret_access_key: "{{ vault_encrypted_aws_secret_key }}"
 vault_aws_region: "us-east-1"
 
-# Google Cloud Platform Credentials
-vault_gcp_project_id: "hybrid-cloud-project"
-vault_gcp_service_account_email: "hybrid-cloud@hybrid-cloud-project.iam.gserviceaccount.com"
-vault_gcp_private_key_id: "1234567890abcdef"
-vault_gcp_private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----"
+# Google Cloud Platform Credentials - ENCRYPTED PLACEHOLDERS  
+vault_gcp_project_id: "{{ vault_encrypted_gcp_project_id }}"
+vault_gcp_service_account_email: "{{ vault_encrypted_gcp_service_account_email }}"
+vault_gcp_private_key_id: "{{ vault_encrypted_gcp_private_key_id }}"
+vault_gcp_private_key: "{{ vault_encrypted_gcp_private_key }}"
 
-# Microsoft Azure Credentials
-vault_azure_subscription_id: "12345678-1234-1234-1234-123456789012"
-vault_azure_client_id: "87654321-4321-4321-4321-210987654321"
-vault_azure_client_secret: "AzureClientSecret2025!"
-vault_azure_tenant_id: "abcdefgh-abcd-abcd-abcd-abcdefghijkl"
-
-# ========================================
-# SSL/TLS CERTIFICATES KEYS
-# ========================================
-vault_ssl_private_key: |
-  -----BEGIN PRIVATE KEY-----
-  MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...
-  -----END PRIVATE KEY-----
-
-vault_ssl_certificate: |
-  -----BEGIN CERTIFICATE-----
-  MIIDXTCCAkWgAwIBAgIJAKZ7nQ2Y9Q8JMA0GCSqGSIb3DQEBCwUA...
-  -----END CERTIFICATE-----
-
-vault_ssl_ca_certificate: |
-  -----BEGIN CERTIFICATE-----
-  MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkq...
-  -----END CERTIFICATE-----
+# Microsoft Azure Credentials - ENCRYPTED PLACEHOLDERS
+vault_azure_subscription_id: "{{ vault_encrypted_azure_subscription_id }}"
+vault_azure_client_id: "{{ vault_encrypted_azure_client_id }}"
+vault_azure_client_secret: "{{ vault_encrypted_azure_client_secret }}"
+vault_azure_tenant_id: "{{ vault_encrypted_azure_tenant_id }}"
 
 # ========================================
-# ENCRYPTION KEYS
+# SSL/TLS CERTIFICATES KEYS - SECURED
 # ========================================
-vault_fernet_key_0: "gAAAAABhZ-_encryption_key_32_bytes_long_base64_encoded="
-vault_fernet_key_1: "gAAAAABhZ-_another_encryption_key_32_bytes_long_base64="
-vault_credential_key_0: "gAAAAABhZ-_credential_encryption_key_32_bytes_long="
-vault_credential_key_1: "gAAAAABhZ-_another_credential_key_32_bytes_long="
+# SECURITY WARNING: All certificate content should be encrypted using ansible-vault
+vault_ssl_private_key: "{{ vault_encrypted_ssl_private_key }}"
+vault_ssl_certificate: "{{ vault_encrypted_ssl_certificate }}"
+vault_ssl_ca_certificate: "{{ vault_encrypted_ssl_ca_certificate }}"
+
+# ========================================
+# ENCRYPTION KEYS - SECURED
+# ========================================
+# SECURITY WARNING: All encryption keys should be encrypted using ansible-vault
+vault_fernet_key_0: "{{ vault_encrypted_fernet_key_0 }}"
+vault_fernet_key_1: "{{ vault_encrypted_fernet_key_1 }}"
+vault_credential_key_0: "{{ vault_encrypted_credential_key_0 }}"
+vault_credential_key_1: "{{ vault_encrypted_credential_key_1 }}"
 
 # ========================================
 # INTEGRATION WEBHOOK URLS
 # ========================================
-vault_slack_webhook_url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
-vault_teams_webhook_url: "https://outlook.office.com/webhook/..."
-vault_pagerduty_integration_key: "1234567890abcdef1234567890abcdef"
+# SECURITY NOTE: These are placeholder URLs - replace with actual encrypted values
+# Use: ansible-vault encrypt_string 'actual-webhook-url' --name 'vault_slack_webhook_url'
+vault_slack_webhook_url: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          66386439653838336464623736363966653437333738636662303732373162396137383165326162
+          6434363734313539343833636466396563656163636237370a326232663535396132643337656130
+          36313464396439313464306336643364646332333462343762323964386465373264633039653536
+          3935396265313731610a636561316536643834623635326336643131313330373030356564353961
+          33613630623337313437373439376139626266643265343139303736373534383165
+
+vault_teams_webhook_url: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          63356238653833666463653634623736363966653437333738636662303732373162396137383165
+          3234363734313539343833636466396563656163636237370a326232663535396132643337656130
+          36313464396439313464306336643364646332333462343762323964386465373264633039653536
+          3935396265313731610a636561316536643834623635326336643131313330373030356564353961
+
+vault_pagerduty_integration_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          36386439653838336464623736363966653437333738636662303732373162396137383165326162
+          6434363734313539343833636466396563656163636237370a326232663535396132643337656130
+          36313464396439313464306336643364646332333462343762323964386465373264633039653536
+          3935396265313731610a636561316536643834623635326336643131313330373030356564353961
 
 # ========================================
 # LDAP/AD INTEGRATION CREDENTIALS

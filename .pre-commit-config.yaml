@@ -1,0 +1,105 @@
+# Security Configuration for Git Hooks and CI/CD
+
+# Pre-commit configuration to prevent secrets from being committed
+repos:
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package.lock.json
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-executables-have-shebangs
+      - id: check-json
+      - id: pretty-format-json
+        args: ['--autofix']
+
+  - repo: https://github.com/psf/black
+    rev: 23.1.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/adrienverge/yamllint.git
+    rev: v1.29.0
+    hooks:
+      - id: yamllint
+        args: [--format, parsable, --strict]
+
+  - repo: https://github.com/ansible/ansible-lint
+    rev: v6.14.1
+    hooks:
+      - id: ansible-lint
+        files: \.(yaml|yml)$
+        args: [--exclude=.cache]
+
+  - repo: https://github.com/bridgecrewio/checkov.git
+    rev: 2.3.153
+    hooks:
+      - id: checkov
+        args: [--framework, terraform, --framework, kubernetes]
+
+  - repo: https://github.com/trufflesecurity/trufflehog.git
+    rev: v3.32.0
+    hooks:
+      - id: trufflehog
+        args: ['--max_depth=50', '--entropy=False', '--regex_timeout=120']
+
+  - repo: https://github.com/gitguardian/ggshield
+    rev: v1.18.0
+    hooks:
+      - id: ggshield
+        language: python
+        stages: [commit]
+
+  - repo: https://github.com/gruntwork-io/pre-commit
+    rev: v0.1.18
+    hooks:
+      - id: tflint
+        args: ['--module']
+      - id: terraform-fmt
+      - id: terraform-validate
+
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.1-beta
+    hooks:
+      - id: hadolint-docker
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']
+
+  - repo: https://github.com/IamTheFij/docker-pre-commit
+    rev: v2.1.1
+    hooks:
+      - id: docker-compose-check
+
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.2
+    hooks:
+      - id: shellcheck
+        args: [--severity=warning]
+
+  - repo: local
+    hooks:
+      - id: vault-encryption-check
+        name: Check Ansible Vault files are encrypted
+        entry: scripts/check-vault-encryption.sh
+        language: script
+        pass_filenames: false
+
+      - id: kubernetes-secrets-check
+        name: Check for hardcoded secrets in Kubernetes manifests
+        entry: scripts/check-k8s-secrets.sh
+        language: script
+        pass_filenames: false
+
+      - id: terraform-secrets-check
+        name: Check for hardcoded secrets in Terraform files
+        entry: scripts/check-terraform-secrets.sh
+        language: script
+        pass_filenames: false
