@@ -1,0 +1,289 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredsecuritycontext
+  annotations:
+    description: "Requires containers to run with specific security context settings"
+    metadata.gatekeeper.sh/title: "Required Security Context"
+    metadata.gatekeeper.sh/version: 1.0.0
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredSecurityContext
+      validation:
+        type: object
+        properties:
+          runAsNonRoot:
+            type: boolean
+            description: "Requires containers to run as non-root user"
+          runAsUser:
+            type: integer
+            description: "Required user ID to run containers"
+          fsGroup:
+            type: integer
+            description: "Required filesystem group ID"
+          allowPrivilegeEscalation:
+            type: boolean
+            description: "Controls privilege escalation"
+          readOnlyRootFilesystem:
+            type: boolean
+            description: "Requires read-only root filesystem"
+          requiredDropCapabilities:
+            type: array
+            items:
+              type: string
+            description: "Capabilities that must be dropped"
+          allowedCapabilities:
+            type: array
+            items:
+              type: string
+            description: "Allowed capabilities to add"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredsecuritycontext
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.securityContext.runAsNonRoot
+          input.parameters.runAsNonRoot
+          msg := sprintf("Container %v must run as non-root user", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.runAsUser != input.parameters.runAsUser
+          input.parameters.runAsUser
+          msg := sprintf("Container %v must run as user ID %v", [container.name, input.parameters.runAsUser])
+        }
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.securityContext.fsGroup != input.parameters.fsGroup
+          input.parameters.fsGroup
+          msg := sprintf("Pod must set fsGroup to %v", [input.parameters.fsGroup])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.allowPrivilegeEscalation != input.parameters.allowPrivilegeEscalation
+          input.parameters.allowPrivilegeEscalation != null
+          msg := sprintf("Container %v allowPrivilegeEscalation must be %v", [container.name, input.parameters.allowPrivilegeEscalation])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.readOnlyRootFilesystem != input.parameters.readOnlyRootFilesystem
+          input.parameters.readOnlyRootFilesystem != null
+          msg := sprintf("Container %v readOnlyRootFilesystem must be %v", [container.name, input.parameters.readOnlyRootFilesystem])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          required := input.parameters.requiredDropCapabilities[_]
+          not required in container.securityContext.capabilities.drop
+          msg := sprintf("Container %v must drop capability %v", [container.name, required])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          capability := container.securityContext.capabilities.add[_]
+          not capability in input.parameters.allowedCapabilities
+          msg := sprintf("Container %v capability %v is not allowed", [container.name, capability])
+        }
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sresourcerequirements
+  annotations:
+    description: "Requires containers to have resource requests and limits"
+    metadata.gatekeeper.sh/title: "Resource Requirements"
+    metadata.gatekeeper.sh/version: 1.0.0
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sResourceRequirements
+      validation:
+        type: object
+        properties:
+          requests:
+            type: object
+            properties:
+              cpu:
+                type: string
+              memory:
+                type: string
+          limits:
+            type: object
+            properties:
+              cpu:
+                type: string
+              memory:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sresourcerequirements
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.requests.cpu
+          input.parameters.requests.cpu
+          msg := sprintf("Container %v must specify CPU requests", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.requests.memory
+          input.parameters.requests.memory
+          msg := sprintf("Container %v must specify memory requests", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.limits.cpu
+          input.parameters.limits.cpu
+          msg := sprintf("Container %v must specify CPU limits", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.resources.limits.memory
+          input.parameters.limits.memory
+          msg := sprintf("Container %v must specify memory limits", [container.name])
+        }
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+  annotations:
+    description: "Requires specified labels on resources"
+    metadata.gatekeeper.sh/title: "Required Labels"
+    metadata.gatekeeper.sh/version: 1.0.0
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+      validation:
+        type: object
+        properties:
+          labels:
+            type: array
+            items:
+              type: string
+            description: "List of required labels"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredlabels
+
+        violation[{"msg": msg}] {
+          required := input.parameters.labels[_]
+          not input.review.object.metadata.labels[required]
+          msg := sprintf("Missing required label: %v", [required])
+        }
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sallowedregistries
+  annotations:
+    description: "Restricts container images to allowed registries"
+    metadata.gatekeeper.sh/title: "Allowed Registries"
+    metadata.gatekeeper.sh/version: 1.0.0
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sAllowedRegistries
+      validation:
+        type: object
+        properties:
+          registries:
+            type: array
+            items:
+              type: string
+            description: "List of allowed container registries"
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sallowedregistries
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not starts_with_allowed_registry(container.image)
+          msg := sprintf("Container image %v is not from an allowed registry", [container.image])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not starts_with_allowed_registry(container.image)
+          msg := sprintf("Init container image %v is not from an allowed registry", [container.image])
+        }
+
+        starts_with_allowed_registry(image) {
+          registry := input.parameters.registries[_]
+          startswith(image, registry)
+        }
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8sblocknodeport
+  annotations:
+    description: "Blocks NodePort services for security"
+    metadata.gatekeeper.sh/title: "Block NodePort"
+    metadata.gatekeeper.sh/version: 1.0.0
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sBlockNodePort
+      validation:
+        type: object
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sblocknodeport
+
+        violation[{"msg": msg}] {
+          input.review.object.kind == "Service"
+          input.review.object.spec.type == "NodePort"
+          msg := "NodePort services are not allowed for security reasons"
+        }
+---
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirenetworkpolicy
+  annotations:
+    description: "Requires NetworkPolicy for namespaces"
+    metadata.gatekeeper.sh/title: "Require NetworkPolicy"
+    metadata.gatekeeper.sh/version: 1.0.0
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireNetworkPolicy
+      validation:
+        type: object
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirenetworkpolicy
+
+        violation[{"msg": msg}] {
+          input.review.object.kind == "Namespace"
+          not has_network_policy
+          msg := "Namespace must have a NetworkPolicy"
+        }
+
+        has_network_policy {
+          # This would need to be implemented with external data
+          # or additional constraints to check for NetworkPolicy existence
+          false
+        }

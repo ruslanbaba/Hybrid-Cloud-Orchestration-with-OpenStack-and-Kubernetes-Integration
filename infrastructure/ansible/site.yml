@@ -1,0 +1,422 @@
+---
+# Enterprise Hybrid Cloud Orchestration - Main Deployment Playbook
+# This playbook orchestrates the complete deployment of OpenStack with Kubernetes integration
+
+- name: "Enterprise Hybrid Cloud Deployment - Pre-flight Checks"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Verify deployment prerequisites"
+      block:
+        - name: "Check Ansible version"
+          assert:
+            that:
+              - ansible_version.full is version('2.12.0', '>=')
+            fail_msg: "Ansible version 2.12.0 or higher is required"
+
+        - name: "Verify vault file is encrypted"
+          command: grep -q "ANSIBLE_VAULT" group_vars/vault.yml
+          failed_when: false
+          register: vault_check
+
+        - name: "Warning if vault is not encrypted"
+          debug:
+            msg: "WARNING: Vault file is not encrypted. Run 'ansible-vault encrypt group_vars/vault.yml'"
+          when: vault_check.rc != 0
+
+        - name: "Check required tools"
+          command: "which {{ item }}"
+          loop:
+            - python3
+            - pip3
+            - git
+            - docker
+          register: tool_check
+          failed_when: tool_check.rc != 0
+
+        - name: "Display deployment summary"
+          debug:
+            msg: |
+              ===================================================================
+              ENTERPRISE HYBRID CLOUD ORCHESTRATION DEPLOYMENT
+              ===================================================================
+              OpenStack Release: {{ openstack_release }}
+              Environment: {{ deployment_environment_type }}
+              Container Technology: {{ container_tech }}
+              Security Hardening: {{ apply_security_hardening }}
+              Hybrid Cloud: {{ hybrid_cloud_enabled }}
+              Multi-Cloud Providers: {{ multi_cloud_providers | length }}
+              ===================================================================
+
+- name: "Phase 1: Infrastructure Preparation"
+  hosts: all
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "System preparation"
+      block:
+        - name: "Update system packages"
+          package:
+            name: "*"
+            state: latest
+          when: ansible_os_family == "RedHat" or ansible_os_family == "Debian"
+
+        - name: "Install base packages"
+          package:
+            name:
+              - python3
+              - python3-pip
+              - git
+              - curl
+              - wget
+              - unzip
+              - htop
+              - vim
+              - tmux
+              - rsync
+            state: present
+
+        - name: "Configure system limits"
+          pam_limits:
+            domain: "*"
+            limit_type: "{{ item.type }}"
+            limit_item: "{{ item.item }}"
+            value: "{{ item.value }}"
+          loop:
+            - { type: "soft", item: "nofile", value: "65536" }
+            - { type: "hard", item: "nofile", value: "65536" }
+            - { type: "soft", item: "nproc", value: "32768" }
+            - { type: "hard", item: "nproc", value: "32768" }
+
+        - name: "Configure kernel parameters"
+          sysctl:
+            name: "{{ item.name }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: true
+          loop:
+            - { name: "net.ipv4.ip_forward", value: "1" }
+            - { name: "net.ipv4.conf.all.rp_filter", value: "0" }
+            - { name: "net.ipv4.conf.default.rp_filter", value: "0" }
+            - { name: "net.bridge.bridge-nf-call-iptables", value: "1" }
+            - { name: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+            - { name: "vm.swappiness", value: "10" }
+            - { name: "vm.max_map_count", value: "262144" }
+
+- name: "Phase 2: Security Hardening"
+  hosts: all
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Apply security hardening"
+      block:
+        - name: "Configure SSH hardening"
+          lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: "{{ item.regexp }}"
+            line: "{{ item.line }}"
+            backup: true
+          loop:
+            - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
+            - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
+            - { regexp: "^#?PubkeyAuthentication", line: "PubkeyAuthentication yes" }
+            - { regexp: "^#?Protocol", line: "Protocol 2" }
+            - { regexp: "^#?ClientAliveInterval", line: "ClientAliveInterval 300" }
+            - { regexp: "^#?ClientAliveCountMax", line: "ClientAliveCountMax 2" }
+          notify: restart_ssh
+          when: security_ssh_hardening | default(true)
+
+        - name: "Configure firewall"
+          ufw:
+            state: enabled
+            default: deny
+            direction: incoming
+          when: security_firewall_enabled | default(true)
+
+        - name: "Allow SSH through firewall"
+          ufw:
+            rule: allow
+            port: "22"
+            proto: tcp
+          when: security_firewall_enabled | default(true)
+
+        - name: "Install and configure fail2ban"
+          package:
+            name: fail2ban
+            state: present
+          when: security_hardening_enabled | default(true)
+
+  handlers:
+    - name: restart_ssh
+      service:
+        name: ssh
+        state: restarted
+
+- name: "Phase 3: OpenStack-Ansible Bootstrap"
+  hosts: deployment_hosts
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Bootstrap OpenStack-Ansible"
+      block:
+        - name: "Clone OpenStack-Ansible repository"
+          git:
+            repo: "https://opendev.org/openstack/openstack-ansible"
+            dest: /opt/openstack-ansible
+            version: "stable/{{ openstack_release }}"
+            force: true
+
+        - name: "Install OpenStack-Ansible requirements"
+          pip:
+            requirements: /opt/openstack-ansible/requirements.txt
+            executable: pip3
+
+        - name: "Run OpenStack-Ansible bootstrap"
+          command: /opt/openstack-ansible/scripts/bootstrap-ansible.sh
+          args:
+            chdir: /opt/openstack-ansible
+            creates: /opt/ansible-runtime/bin/ansible
+
+        - name: "Create OpenStack deployment directory"
+          file:
+            path: /etc/openstack_deploy
+            state: directory
+            mode: '0755'
+
+        - name: "Copy configuration files"
+          copy:
+            src: "{{ item.src }}"
+            dest: "{{ item.dest }}"
+            backup: true
+          loop:
+            - { src: "group_vars/all.yml", dest: "/etc/openstack_deploy/user_variables.yml" }
+            - { src: "inventory/production.yml", dest: "/etc/openstack_deploy/openstack_user_config.yml" }
+
+- name: "Phase 4: OpenStack Infrastructure Deployment"
+  hosts: deployment_hosts
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Deploy OpenStack infrastructure"
+      block:
+        - name: "Generate passwords"
+          command: python3 /opt/openstack-ansible/scripts/pw-token-gen.py --file /etc/openstack_deploy/user_secrets.yml
+          args:
+            creates: /etc/openstack_deploy/user_secrets.yml
+
+        - name: "Run setup-hosts playbook"
+          command: openstack-ansible setup-hosts.yml
+          args:
+            chdir: /opt/openstack-ansible/playbooks
+          register: setup_hosts_result
+          failed_when: setup_hosts_result.rc != 0
+
+        - name: "Run setup-infrastructure playbook"
+          command: openstack-ansible setup-infrastructure.yml
+          args:
+            chdir: /opt/openstack-ansible/playbooks
+          register: setup_infra_result
+          failed_when: setup_infra_result.rc != 0
+
+        - name: "Run setup-openstack playbook"
+          command: openstack-ansible setup-openstack.yml
+          args:
+            chdir: /opt/openstack-ansible/playbooks
+          register: setup_openstack_result
+          failed_when: setup_openstack_result.rc != 0
+
+- name: "Phase 5: Kubernetes Integration Setup"
+  hosts: deployment_hosts
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Configure Magnum for Kubernetes"
+      block:
+        - name: "Create Magnum cluster templates"
+          uri:
+            url: "{{ keystone_service_adminuri }}/v1/clustertemplates"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+              X-Auth-Token: "{{ openstack_auth_token }}"
+            body_format: json
+            body: "{{ item }}"
+            status_code: 201
+          loop: "{{ magnum_kubernetes_cluster_templates }}"
+          when: magnum_cluster_template_kubernetes_enabled | default(true)
+
+        - name: "Configure Octavia for load balancing"
+          command: |
+            openstack loadbalancer amphora image create \
+              --name amphora-x64-haproxy \
+              --disk-format qcow2 \
+              --container-format bare \
+              --file /opt/amphora-x64-haproxy.qcow2 \
+              --tag amphora
+          environment:
+            OS_CLOUD: openstack
+
+- name: "Phase 6: Hybrid Cloud Configuration"
+  hosts: deployment_hosts
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Configure hybrid cloud connectivity"
+      block:
+        - name: "Install cloud provider CLIs"
+          pip:
+            name:
+              - awscli
+              - google-cloud-sdk
+              - azure-cli
+            executable: pip3
+          when: hybrid_cloud_enabled | default(true)
+
+        - name: "Configure AWS credentials"
+          copy:
+            content: |
+              [default]
+              aws_access_key_id = {{ vault_aws_access_key_id }}
+              aws_secret_access_key = {{ vault_aws_secret_access_key }}
+              region = {{ vault_aws_region }}
+            dest: /root/.aws/credentials
+            mode: '0600'
+          when: 
+            - hybrid_cloud_enabled | default(true)
+            - multi_cloud_providers | selectattr('name', 'equalto', 'aws') | list | length > 0
+
+        - name: "Configure GCP credentials"
+          copy:
+            content: |
+              {
+                "type": "service_account",
+                "project_id": "{{ vault_gcp_project_id }}",
+                "private_key_id": "{{ vault_gcp_private_key_id }}",
+                "private_key": "{{ vault_gcp_private_key }}",
+                "client_email": "{{ vault_gcp_service_account_email }}",
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token"
+              }
+            dest: /root/.config/gcloud/application_default_credentials.json
+            mode: '0600'
+          when: 
+            - hybrid_cloud_enabled | default(true)
+            - multi_cloud_providers | selectattr('name', 'equalto', 'gcp') | list | length > 0
+
+- name: "Phase 7: Monitoring and Logging Setup"
+  hosts: monitoring_hosts
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Deploy monitoring stack"
+      block:
+        - name: "Install Docker"
+          package:
+            name: docker.io
+            state: present
+
+        - name: "Start Docker service"
+          service:
+            name: docker
+            state: started
+            enabled: true
+
+        - name: "Deploy Prometheus"
+          docker_container:
+            name: prometheus
+            image: prom/prometheus:latest
+            ports:
+              - "9090:9090"
+            volumes:
+              - /opt/prometheus/config:/etc/prometheus
+              - /opt/prometheus/data:/prometheus
+            restart_policy: always
+          when: prometheus_enabled | default(true)
+
+        - name: "Deploy Grafana"
+          docker_container:
+            name: grafana
+            image: grafana/grafana:latest
+            ports:
+              - "3000:3000"
+            environment:
+              GF_SECURITY_ADMIN_PASSWORD: "{{ vault_grafana_admin_password }}"
+            volumes:
+              - /opt/grafana/data:/var/lib/grafana
+            restart_policy: always
+          when: grafana_enabled | default(true)
+
+- name: "Phase 8: Post-Deployment Validation"
+  hosts: deployment_hosts
+  become: true
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  tasks:
+    - name: "Validate OpenStack deployment"
+      block:
+        - name: "Check OpenStack services"
+          command: openstack service list
+          environment:
+            OS_CLOUD: openstack
+          register: service_list
+          failed_when: "'keystone' not in service_list.stdout"
+
+        - name: "Create test resources"
+          block:
+            - name: "Create test network"
+              command: openstack network create test-network
+              environment:
+                OS_CLOUD: openstack
+
+            - name: "Create test subnet"
+              command: openstack subnet create --network test-network --subnet-range 192.168.100.0/24 test-subnet
+              environment:
+                OS_CLOUD: openstack
+
+            - name: "Create test flavor"
+              command: openstack flavor create --ram 512 --disk 1 --vcpus 1 test.tiny
+              environment:
+                OS_CLOUD: openstack
+
+        - name: "Display deployment summary"
+          debug:
+            msg: |
+              ===================================================================
+              ENTERPRISE HYBRID CLOUD DEPLOYMENT COMPLETED SUCCESSFULLY
+              ===================================================================
+              OpenStack Dashboard: https://{{ external_lb_vip_address }}
+              Grafana Dashboard: http://{{ external_lb_vip_address }}:3000
+              Prometheus: http://{{ external_lb_vip_address }}:9090
+              
+              Services Deployed:
+              - OpenStack {{ openstack_release }}
+              - Kubernetes via Magnum
+              - Load Balancing via Octavia
+              - Monitoring via Prometheus/Grafana
+              - Hybrid Cloud Integration
+              
+              Next Steps:
+              1. Configure cloud provider connections
+              2. Deploy sample Kubernetes clusters
+              3. Set up workload migration policies
+              4. Configure backup and disaster recovery
+              ===================================================================

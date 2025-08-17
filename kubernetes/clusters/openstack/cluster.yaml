@@ -1,0 +1,308 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackCluster
+metadata:
+  name: openstack-k8s-cluster
+  namespace: default
+spec:
+  cloudName: openstack
+  cloudsSecret:
+    name: openstack-cloud-config
+    namespace: default
+  dnsNameservers:
+    - "8.8.8.8"
+    - "8.8.4.4"
+  externalNetworkId: "{{ external_network_id }}"
+  managedAPIServerLoadBalancer: true
+  managedSecurityGroups: true
+  nodeCidr: "10.0.0.0/24"
+  subnet:
+    cidr: "10.0.0.0/24"
+    dnsNameservers:
+      - "8.8.8.8"
+      - "8.8.4.4"
+  apiServerLoadBalancer:
+    enabled: true
+    provider: "octavia"
+  bastion:
+    enabled: true
+    instance:
+      flavor: "m1.medium"
+      image: "ubuntu-22.04"
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: openstack-k8s-cluster
+  namespace: default
+  labels:
+    cluster.x-k8s.io/cluster-name: openstack-k8s-cluster
+    environment: production
+    provider: openstack
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+        - "192.168.0.0/16"
+    services:
+      cidrBlocks:
+        - "10.96.0.0/12"
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+    kind: KubeadmControlPlane
+    name: openstack-k8s-cluster-control-plane
+    namespace: default
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: OpenStackCluster
+    name: openstack-k8s-cluster
+    namespace: default
+---
+apiVersion: controlplane.cluster.x-k8s.io/v1beta1
+kind: KubeadmControlPlane
+metadata:
+  name: openstack-k8s-cluster-control-plane
+  namespace: default
+spec:
+  kubeadmConfigSpec:
+    clusterConfiguration:
+      apiServer:
+        extraArgs:
+          cloud-provider: external
+          enable-admission-plugins: NodeRestriction,ResourceQuota,PodSecurityPolicy
+          audit-log-maxage: "30"
+          audit-log-maxbackup: "3"
+          audit-log-maxsize: "100"
+          audit-log-path: /var/log/audit.log
+          encryption-provider-config: /etc/kubernetes/encryption-config.yaml
+        extraVolumes:
+        - hostPath: /etc/kubernetes/encryption-config.yaml
+          mountPath: /etc/kubernetes/encryption-config.yaml
+          name: encryption-config
+          readOnly: true
+        certSANs:
+        - localhost
+        - 127.0.0.1
+        - "{{ api_server_vip }}"
+      controllerManager:
+        extraArgs:
+          cloud-provider: external
+          enable-hostpath-provisioner: "true"
+      dns:
+        type: CoreDNS
+      etcd:
+        local:
+          dataDir: /var/lib/etcd
+          extraArgs:
+            initial-cluster-state: new
+            name: "{{ ds.meta_data.hostname }}"
+            listen-peer-urls: "https://{{ ds.meta_data.local_ipv4 }}:2380"
+            listen-client-urls: "https://{{ ds.meta_data.local_ipv4 }}:2379,https://127.0.0.1:2379"
+            advertise-peer-urls: "https://{{ ds.meta_data.local_ipv4 }}:2380"
+            advertise-client-urls: "https://{{ ds.meta_data.local_ipv4 }}:2379"
+      networking:
+        podSubnet: "192.168.0.0/16"
+        serviceSubnet: "10.96.0.0/12"
+        dnsDomain: cluster.local
+      scheduler:
+        extraArgs:
+          bind-address: "0.0.0.0"
+      imageRepository: registry.k8s.io
+      kubernetesVersion: v1.27.3
+    files:
+    - content: |
+        apiVersion: apiserver.config.k8s.io/v1
+        kind: EncryptionConfiguration
+        resources:
+        - resources:
+          - secrets
+          providers:
+          - aescbc:
+              keys:
+              - name: key1
+                secret: {{ kubernetes_encryption_secret | b64encode }}
+          - identity: {}
+      owner: root:root
+      path: /etc/kubernetes/encryption-config.yaml
+      permissions: "0600"
+    - content: |
+        [Service]
+        Environment="KUBELET_EXTRA_ARGS=--cloud-provider=external --provider-id=openstack:///{{ ds.meta_data.uuid }}"
+      owner: root:root
+      path: /etc/systemd/system/kubelet.service.d/20-cloud-provider.conf
+    - content: |
+        #!/bin/bash
+        set -e
+        
+        # Install container runtime (containerd)
+        apt-get update
+        apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+        
+        # Add Docker's official GPG key
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+        
+        # Add Docker repository
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+        
+        # Install containerd
+        apt-get update
+        apt-get install -y containerd.io
+        
+        # Configure containerd
+        mkdir -p /etc/containerd
+        containerd config default | tee /etc/containerd/config.toml
+        
+        # Enable systemd cgroup driver
+        sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+        
+        # Restart containerd
+        systemctl restart containerd
+        systemctl enable containerd
+        
+        # Install kubeadm, kubelet, kubectl
+        curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+        echo "deb https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
+        
+        apt-get update
+        apt-get install -y kubelet=1.27.3-00 kubeadm=1.27.3-00 kubectl=1.27.3-00
+        apt-mark hold kubelet kubeadm kubectl
+        
+        # Configure kubelet
+        echo "KUBELET_EXTRA_ARGS=--cloud-provider=external --provider-id=openstack:///$(curl -s http://169.254.169.254/openstack/latest/meta_data.json | jq -r .uuid)" > /etc/default/kubelet
+        
+        systemctl enable kubelet
+      owner: root:root
+      path: /tmp/bootstrap.sh
+      permissions: "0700"
+    initConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+          provider-id: "openstack://{{ ds.meta_data.uuid }}"
+    joinConfiguration:
+      nodeRegistration:
+        kubeletExtraArgs:
+          cloud-provider: external
+          provider-id: "openstack://{{ ds.meta_data.uuid }}"
+    preKubeadmCommands:
+    - bash /tmp/bootstrap.sh
+    postKubeadmCommands:
+    - |
+      # Install CNI (Cilium)
+      kubectl apply -f https://raw.githubusercontent.com/cilium/cilium/v1.14.1/install/kubernetes/quick-install.yaml
+      
+      # Install OpenStack Cloud Controller Manager
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-roles.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/cloud-controller-manager-role-bindings.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/controller-manager/openstack-cloud-controller-manager-ds.yaml
+      
+      # Install CSI driver
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/cinder-csi-plugin/cinder-csi-controllerplugin-rbac.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/cinder-csi-plugin/cinder-csi-controllerplugin.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/cinder-csi-plugin/cinder-csi-nodeplugin-rbac.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/cinder-csi-plugin/cinder-csi-nodeplugin.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/cinder-csi-plugin/csi-cinder-driver.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes/cloud-provider-openstack/master/manifests/cinder-csi-plugin/csi-secret-cinderplugin.yaml
+  machineTemplate:
+    infrastructureRef:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: OpenStackMachineTemplate
+      name: openstack-k8s-cluster-control-plane
+      namespace: default
+  replicas: 3
+  version: v1.27.3
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: openstack-k8s-cluster-control-plane
+  namespace: default
+spec:
+  template:
+    spec:
+      cloudName: openstack
+      cloudsSecret:
+        name: openstack-cloud-config
+        namespace: default
+      flavor: "m1.xlarge"
+      image: "ubuntu-22.04"
+      sshKeyName: "kubernetes-keypair"
+      securityGroups:
+      - name: "k8s-cluster-default-secgroup"
+      serverMetadata:
+        cluster: "openstack-k8s-cluster"
+        role: "control-plane"
+---
+apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+kind: KubeadmConfigTemplate
+metadata:
+  name: openstack-k8s-cluster-worker
+  namespace: default
+spec:
+  template:
+    spec:
+      files:
+      - content: |
+          [Service]
+          Environment="KUBELET_EXTRA_ARGS=--cloud-provider=external --provider-id=openstack:///{{ ds.meta_data.uuid }}"
+        owner: root:root
+        path: /etc/systemd/system/kubelet.service.d/20-cloud-provider.conf
+      joinConfiguration:
+        nodeRegistration:
+          kubeletExtraArgs:
+            cloud-provider: external
+            provider-id: "openstack://{{ ds.meta_data.uuid }}"
+      preKubeadmCommands:
+      - bash /tmp/bootstrap.sh
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachineDeployment
+metadata:
+  name: openstack-k8s-cluster-worker
+  namespace: default
+spec:
+  clusterName: openstack-k8s-cluster
+  replicas: 3
+  selector:
+    matchLabels:
+      cluster.x-k8s.io/cluster-name: openstack-k8s-cluster
+      cluster.x-k8s.io/deployment-name: openstack-k8s-cluster-worker
+  template:
+    metadata:
+      labels:
+        cluster.x-k8s.io/cluster-name: openstack-k8s-cluster
+        cluster.x-k8s.io/deployment-name: openstack-k8s-cluster-worker
+    spec:
+      bootstrap:
+        configRef:
+          apiVersion: bootstrap.cluster.x-k8s.io/v1beta1
+          kind: KubeadmConfigTemplate
+          name: openstack-k8s-cluster-worker
+          namespace: default
+      clusterName: openstack-k8s-cluster
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: OpenStackMachineTemplate
+        name: openstack-k8s-cluster-worker
+        namespace: default
+      version: v1.27.3
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: OpenStackMachineTemplate
+metadata:
+  name: openstack-k8s-cluster-worker
+  namespace: default
+spec:
+  template:
+    spec:
+      cloudName: openstack
+      cloudsSecret:
+        name: openstack-cloud-config
+        namespace: default
+      flavor: "m1.large"
+      image: "ubuntu-22.04"
+      sshKeyName: "kubernetes-keypair"
+      securityGroups:
+      - name: "k8s-cluster-default-secgroup"
+      serverMetadata:
+        cluster: "openstack-k8s-cluster"
+        role: "worker"

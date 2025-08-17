@@ -1,0 +1,223 @@
+---
+# Ansible Vault - Encrypted Variables for Hybrid Cloud Orchestration
+# This file should be encrypted using: ansible-vault encrypt vault.yml
+# Use: ansible-vault edit vault.yml to edit encrypted content
+
+# ========================================
+# DATABASE CREDENTIALS
+# ========================================
+vault_galera_root_password: "SuperSecureGaleraRoot2025!"
+vault_galera_clustercheck_password: "GaleraClusterCheck2025!"
+
+# ========================================
+# MESSAGE QUEUE CREDENTIALS
+# ========================================
+vault_rabbitmq_password: "RabbitMQSecure2025!"
+vault_rabbitmq_erlang_cookie: "ERLANGCOOKIESECURE2025"
+
+# ========================================
+# LOAD BALANCER CREDENTIALS
+# ========================================
+vault_haproxy_stats_password: "HAProxyStats2025!"
+vault_keepalived_auth_password: "KeepAlivedAuth2025!"
+
+# ========================================
+# KEYSTONE (IDENTITY) CREDENTIALS
+# ========================================
+vault_keystone_auth_admin_password: "KeystoneAdmin2025!"
+vault_keystone_database_password: "KeystoneDB2025!"
+vault_keystone_service_password: "KeystoneService2025!"
+vault_keystone_rabbitmq_password: "KeystoneRabbitMQ2025!"
+
+# ========================================
+# NOVA (COMPUTE) CREDENTIALS
+# ========================================
+vault_nova_admin_password: "NovaAdmin2025!"
+vault_nova_database_password: "NovaDB2025!"
+vault_nova_service_password: "NovaService2025!"
+vault_nova_rabbitmq_password: "NovaRabbitMQ2025!"
+vault_nova_placement_database_password: "NovaPlacementDB2025!"
+
+# ========================================
+# NEUTRON (NETWORKING) CREDENTIALS
+# ========================================
+vault_neutron_admin_password: "NeutronAdmin2025!"
+vault_neutron_database_password: "NeutronDB2025!"
+vault_neutron_service_password: "NeutronService2025!"
+vault_neutron_rabbitmq_password: "NeutronRabbitMQ2025!"
+
+# ========================================
+# GLANCE (IMAGE) CREDENTIALS
+# ========================================
+vault_glance_admin_password: "GlanceAdmin2025!"
+vault_glance_database_password: "GlanceDB2025!"
+vault_glance_service_password: "GlanceService2025!"
+vault_glance_rabbitmq_password: "GlanceRabbitMQ2025!"
+
+# ========================================
+# CINDER (BLOCK STORAGE) CREDENTIALS
+# ========================================
+vault_cinder_admin_password: "CinderAdmin2025!"
+vault_cinder_database_password: "CinderDB2025!"
+vault_cinder_service_password: "CinderService2025!"
+vault_cinder_rabbitmq_password: "CinderRabbitMQ2025!"
+
+# ========================================
+# HEAT (ORCHESTRATION) CREDENTIALS
+# ========================================
+vault_heat_admin_password: "HeatAdmin2025!"
+vault_heat_database_password: "HeatDB2025!"
+vault_heat_service_password: "HeatService2025!"
+vault_heat_rabbitmq_password: "HeatRabbitMQ2025!"
+vault_heat_stack_domain_admin_password: "HeatDomainAdmin2025!"
+vault_heat_auth_encryption_key: "HeatEncryptionKey32BytesLong2025!"
+
+# ========================================
+# HORIZON (DASHBOARD) CREDENTIALS
+# ========================================
+vault_horizon_secret_key: "HorizonSecretKey2025!"
+vault_horizon_session_key: "HorizonSessionKey2025!"
+
+# ========================================
+# OCTAVIA (LOAD BALANCER) CREDENTIALS
+# ========================================
+vault_octavia_admin_password: "OctaviaAdmin2025!"
+vault_octavia_database_password: "OctaviaDB2025!"
+vault_octavia_service_password: "OctaviaService2025!"
+vault_octavia_rabbitmq_password: "OctaviaRabbitMQ2025!"
+
+# ========================================
+# MAGNUM (CONTAINER ORCHESTRATION) CREDENTIALS
+# ========================================
+vault_magnum_admin_password: "MagnumAdmin2025!"
+vault_magnum_database_password: "MagnumDB2025!"
+vault_magnum_service_password: "MagnumService2025!"
+vault_magnum_rabbitmq_password: "MagnumRabbitMQ2025!"
+vault_magnum_trustee_domain_admin_password: "MagnumTrusteeAdmin2025!"
+
+# ========================================
+# MONITORING AND LOGGING CREDENTIALS
+# ========================================
+vault_grafana_admin_password: "GrafanaAdmin2025!"
+vault_prometheus_admin_password: "PrometheusAdmin2025!"
+vault_elasticsearch_password: "ElasticsearchAdmin2025!"
+vault_kibana_password: "KibanaAdmin2025!"
+
+# ========================================
+# BACKUP AND SECURITY CREDENTIALS
+# ========================================
+vault_barbican_admin_password: "BarbicanAdmin2025!"
+vault_barbican_database_password: "BarbicanDB2025!"
+vault_barbican_service_password: "BarbicanService2025!"
+vault_barbican_rabbitmq_password: "BarbicanRabbitMQ2025!"
+
+# ========================================
+# ADDITIONAL SERVICES CREDENTIALS
+# ========================================
+vault_swift_admin_password: "SwiftAdmin2025!"
+vault_swift_service_password: "SwiftService2025!"
+vault_swift_hash_path_prefix: "SwiftHashPrefix2025"
+vault_swift_hash_path_suffix: "SwiftHashSuffix2025"
+
+vault_manila_admin_password: "ManilaAdmin2025!"
+vault_manila_database_password: "ManilaDB2025!"
+vault_manila_service_password: "ManilaService2025!"
+vault_manila_rabbitmq_password: "ManilaRabbitMQ2025!"
+
+vault_designate_admin_password: "DesignateAdmin2025!"
+vault_designate_database_password: "DesignateDB2025!"
+vault_designate_service_password: "DesignateService2025!"
+vault_designate_rabbitmq_password: "DesignateRabbitMQ2025!"
+
+# ========================================
+# CLOUD PROVIDER CREDENTIALS
+# ========================================
+
+# AWS Credentials
+vault_aws_access_key_id: "AKIA1234567890ABCDEF"
+vault_aws_secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+vault_aws_region: "us-east-1"
+
+# Google Cloud Platform Credentials
+vault_gcp_project_id: "hybrid-cloud-project"
+vault_gcp_service_account_email: "hybrid-cloud@hybrid-cloud-project.iam.gserviceaccount.com"
+vault_gcp_private_key_id: "1234567890abcdef"
+vault_gcp_private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----"
+
+# Microsoft Azure Credentials
+vault_azure_subscription_id: "12345678-1234-1234-1234-123456789012"
+vault_azure_client_id: "87654321-4321-4321-4321-210987654321"
+vault_azure_client_secret: "AzureClientSecret2025!"
+vault_azure_tenant_id: "abcdefgh-abcd-abcd-abcd-abcdefghijkl"
+
+# ========================================
+# SSL/TLS CERTIFICATES KEYS
+# ========================================
+vault_ssl_private_key: |
+  -----BEGIN PRIVATE KEY-----
+  MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...
+  -----END PRIVATE KEY-----
+
+vault_ssl_certificate: |
+  -----BEGIN CERTIFICATE-----
+  MIIDXTCCAkWgAwIBAgIJAKZ7nQ2Y9Q8JMA0GCSqGSIb3DQEBCwUA...
+  -----END CERTIFICATE-----
+
+vault_ssl_ca_certificate: |
+  -----BEGIN CERTIFICATE-----
+  MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkq...
+  -----END CERTIFICATE-----
+
+# ========================================
+# ENCRYPTION KEYS
+# ========================================
+vault_fernet_key_0: "gAAAAABhZ-_encryption_key_32_bytes_long_base64_encoded="
+vault_fernet_key_1: "gAAAAABhZ-_another_encryption_key_32_bytes_long_base64="
+vault_credential_key_0: "gAAAAABhZ-_credential_encryption_key_32_bytes_long="
+vault_credential_key_1: "gAAAAABhZ-_another_credential_key_32_bytes_long="
+
+# ========================================
+# INTEGRATION WEBHOOK URLS
+# ========================================
+vault_slack_webhook_url: "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+vault_teams_webhook_url: "https://outlook.office.com/webhook/..."
+vault_pagerduty_integration_key: "1234567890abcdef1234567890abcdef"
+
+# ========================================
+# LDAP/AD INTEGRATION CREDENTIALS
+# ========================================
+vault_ldap_bind_user: "CN=service-account,OU=Service Accounts,DC=company,DC=com"
+vault_ldap_bind_password: "LDAPServicePassword2025!"
+vault_ldap_server_url: "ldaps://ldap.company.com:636"
+
+# ========================================
+# EXTERNAL DATABASE CREDENTIALS (if using external DB)
+# ========================================
+vault_external_db_host: "external-db.company.com"
+vault_external_db_root_password: "ExternalDBRoot2025!"
+vault_external_db_admin_user: "openstack_admin"
+vault_external_db_admin_password: "ExternalDBAdmin2025!"
+
+# ========================================
+# BACKUP STORAGE CREDENTIALS
+# ========================================
+vault_backup_encryption_key: "BackupEncryptionKey32BytesLong2025!"
+vault_backup_storage_access_key: "AKIA1234567890BACKUP"
+vault_backup_storage_secret_key: "BackupStorageSecretKey2025!"
+
+# ========================================
+# CONTAINER REGISTRY CREDENTIALS
+# ========================================
+vault_registry_username: "registry-admin"
+vault_registry_password: "RegistryAdmin2025!"
+vault_registry_email: "registry-admin@company.com"
+
+# ========================================
+# KUBERNETES CLUSTER CREDENTIALS
+# ========================================
+vault_k8s_admin_token: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+vault_k8s_service_account_key: "k8s-service-account-key-2025"
+vault_k8s_cluster_ca_cert: |
+  -----BEGIN CERTIFICATE-----
+  MIIDWTCCAkGgAwIBAgIUK8s9Q2Y5X7V8L4Q9X2B8V3Q1R2QwDQYJ...
+  -----END CERTIFICATE-----

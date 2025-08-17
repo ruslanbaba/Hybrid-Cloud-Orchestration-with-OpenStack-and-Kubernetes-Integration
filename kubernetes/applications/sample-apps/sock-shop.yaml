@@ -1,0 +1,514 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sock-shop
+  labels:
+    name: sock-shop
+    app.kubernetes.io/name: sock-shop
+    app.kubernetes.io/version: "1.0"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carts
+  namespace: sock-shop
+  labels:
+    app: carts
+    tier: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: carts
+  template:
+    metadata:
+      labels:
+        app: carts
+        tier: application
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+      - name: carts
+        image: weaveworksdemos/carts:0.4.8
+        ports:
+        - containerPort: 80
+        env:
+        - name: JAVA_OPTS
+          value: "-Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          capabilities:
+            drop:
+              - all
+            add:
+              - NET_BIND_SERVICE
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            cpu: 300m
+            memory: 500Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 300
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 3
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carts
+  namespace: sock-shop
+  annotations:
+    prometheus.io/scrape: 'false'
+  labels:
+    app: carts
+    tier: application
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: carts
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carts-db
+  namespace: sock-shop
+  labels:
+    app: carts-db
+    tier: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: carts-db
+  template:
+    metadata:
+      labels:
+        app: carts-db
+        tier: database
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+      - name: carts-db
+        image: mongo:4.4
+        ports:
+        - name: mongo
+          containerPort: 27017
+        securityContext:
+          capabilities:
+            drop:
+              - all
+            add:
+              - CHOWN
+              - SETGID
+              - SETUID
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            cpu: 300m
+            memory: 1000Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+        - mountPath: /data/db
+          name: carts-db-data
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+      - name: carts-db-data
+        persistentVolumeClaim:
+          claimName: carts-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carts-db
+  namespace: sock-shop
+  labels:
+    app: carts-db
+    tier: database
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  selector:
+    app: carts-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: carts-db-pvc
+  namespace: sock-shop
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: cinder-csi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalogue
+  namespace: sock-shop
+  labels:
+    app: catalogue
+    tier: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: catalogue
+  template:
+    metadata:
+      labels:
+        app: catalogue
+        tier: application
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+      - name: catalogue
+        image: weaveworksdemos/catalogue:0.3.5
+        ports:
+        - containerPort: 80
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          capabilities:
+            drop:
+              - all
+            add:
+              - NET_BIND_SERVICE
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            cpu: 200m
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 300
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalogue
+  namespace: sock-shop
+  annotations:
+    prometheus.io/scrape: 'false'
+  labels:
+    app: catalogue
+    tier: application
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: catalogue
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalogue-db
+  namespace: sock-shop
+  labels:
+    app: catalogue-db
+    tier: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalogue-db
+  template:
+    metadata:
+      labels:
+        app: catalogue-db
+        tier: database
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+      - name: catalogue-db
+        image: weaveworksdemos/catalogue-db:0.3.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: catalogue-db-secret
+              key: password
+        - name: MYSQL_DATABASE
+          value: socksdb
+        ports:
+        - name: mysql
+          containerPort: 3306
+        securityContext:
+          capabilities:
+            drop:
+              - all
+            add:
+              - CHOWN
+              - SETGID
+              - SETUID
+              - DAC_OVERRIDE
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            cpu: 300m
+            memory: 1000Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: catalogue-db-data
+      volumes:
+      - name: catalogue-db-data
+        persistentVolumeClaim:
+          claimName: catalogue-db-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalogue-db
+  namespace: sock-shop
+  labels:
+    app: catalogue-db
+    tier: database
+spec:
+  ports:
+  - port: 3306
+    targetPort: 3306
+  selector:
+    app: catalogue-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: catalogue-db-pvc
+  namespace: sock-shop
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: cinder-csi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: catalogue-db-secret
+  namespace: sock-shop
+type: Opaque
+data:
+  password: ZmFrZV9wYXNzd29yZA== # fake_password (base64 encoded)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: front-end
+  namespace: sock-shop
+  labels:
+    app: front-end
+    tier: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: front-end
+  template:
+    metadata:
+      labels:
+        app: front-end
+        tier: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+      - name: front-end
+        image: weaveworksdemos/front-end:0.3.12
+        ports:
+        - containerPort: 8079
+        env:
+        - name: SESSION_REDIS
+          value: "true"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          capabilities:
+            drop:
+              - all
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            cpu: 300m
+            memory: 1000Mi
+          requests:
+            cpu: 100m
+            memory: 300Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8079
+          initialDelaySeconds: 300
+          periodSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8079
+          initialDelaySeconds: 30
+          periodSeconds: 3
+        volumeMounts:
+        - mountPath: /tmp
+          name: tmp-volume
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: front-end
+  namespace: sock-shop
+  annotations:
+    prometheus.io/scrape: 'false'
+  labels:
+    app: front-end
+    tier: frontend
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8079
+  selector:
+    app: front-end
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sock-shop-ingress
+  namespace: sock-shop
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - sockshop.example.com
+    secretName: sockshop-tls
+  rules:
+  - host: sockshop.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: front-end
+            port:
+              number: 80
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sock-shop-pdb
+  namespace: sock-shop
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      tier: application
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sock-shop-netpol
+  namespace: sock-shop
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: sock-shop
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: sock-shop
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443

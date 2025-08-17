@@ -1,0 +1,328 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sock-shop-openstack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: sock-shop
+    environment: production
+    cluster: openstack
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: hybrid-cloud-apps
+  source:
+    repoURL: https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+    targetRevision: main
+    path: kubernetes/applications/sample-apps
+    directory:
+      recurse: true
+      include: 'sock-shop*.yaml'
+  destination:
+    server: https://kubernetes-openstack.example.com
+    namespace: sock-shop
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - Validate=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: ""
+      kind: Secret
+      jsonPointers:
+        - /data
+  info:
+    - name: 'Description'
+      value: 'Sock Shop microservices demo application on OpenStack Kubernetes cluster'
+    - name: 'Owner'
+      value: 'Platform Team'
+    - name: 'Environment'
+      value: 'Production'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sock-shop-aws
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: sock-shop
+    environment: production
+    cluster: aws
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: hybrid-cloud-apps
+  source:
+    repoURL: https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+    targetRevision: main
+    path: kubernetes/applications/sample-apps
+    kustomize:
+      patchesStrategicMerge:
+        - |-
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: front-end
+            namespace: sock-shop
+            annotations:
+              service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+              service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+          spec:
+            type: LoadBalancer
+      patches:
+        - target:
+            kind: PersistentVolumeClaim
+          patch: |-
+            - op: replace
+              path: /spec/storageClassName
+              value: gp3
+  destination:
+    server: https://kubernetes-aws.example.com
+    namespace: sock-shop
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - Validate=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  info:
+    - name: 'Description'
+      value: 'Sock Shop microservices demo application on AWS EKS cluster'
+    - name: 'Owner'
+      value: 'Platform Team'
+    - name: 'Environment'
+      value: 'Production'
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: monitoring-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: monitoring
+spec:
+  generators:
+  - clusters:
+      selector:
+        matchLabels:
+          environment: production
+  template:
+    metadata:
+      name: '{{name}}-monitoring'
+      labels:
+        cluster: '{{name}}'
+        environment: '{{metadata.labels.environment}}'
+    spec:
+      project: hybrid-cloud-platform
+      source:
+        repoURL: https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+        targetRevision: main
+        path: monitoring/manifests
+        directory:
+          recurse: true
+      destination:
+        server: '{{server}}'
+        namespace: monitoring
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+      ignoreDifferences:
+        - group: ""
+          kind: Secret
+          jsonPointers:
+            - /data
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: security-policies
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: security-policies
+spec:
+  generators:
+  - clusters:
+      selector:
+        matchLabels:
+          environment: production
+  template:
+    metadata:
+      name: '{{name}}-security-policies'
+      labels:
+        cluster: '{{name}}'
+        environment: '{{metadata.labels.environment}}'
+    spec:
+      project: hybrid-cloud-platform
+      source:
+        repoURL: https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+        targetRevision: main
+        path: gitops/policies/security
+        directory:
+          recurse: true
+      destination:
+        server: '{{server}}'
+        namespace: gatekeeper-system
+      syncPolicy:
+        automated:
+          prune: false  # Don't auto-prune security policies
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - Validate=true
+      syncWave: -1  # Deploy policies before applications
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: networking-cilium
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: cilium
+    component: networking
+spec:
+  project: hybrid-cloud-platform
+  source:
+    chart: cilium
+    repoURL: https://helm.cilium.io/
+    targetRevision: 1.14.1
+    helm:
+      parameters:
+        - name: cluster.name
+          value: "{{ .Values.cluster.name }}"
+        - name: cluster.id
+          value: "{{ .Values.cluster.id }}"
+        - name: hubble.relay.enabled
+          value: "true"
+        - name: hubble.ui.enabled
+          value: "true"
+        - name: operator.replicas
+          value: "1"
+        - name: ipam.mode
+          value: "kubernetes"
+        - name: tunnel
+          value: "vxlan"
+        - name: enableIPv4Masquerade
+          value: "true"
+        - name: enableIdentityMark
+          value: "false"
+      values: |
+        cluster:
+          name: openstack-k8s-cluster
+          id: 1
+        hubble:
+          enabled: true
+          metrics:
+            enabled:
+              - dns
+              - drop
+              - tcp
+              - flow
+              - icmp
+              - http
+          relay:
+            enabled: true
+            rollOutPods: true
+          ui:
+            enabled: true
+            rollOutPods: true
+            ingress:
+              enabled: true
+              annotations:
+                kubernetes.io/ingress.class: nginx
+                cert-manager.io/cluster-issuer: letsencrypt-prod
+              hosts:
+                - hubble.example.com
+              tls:
+                - secretName: hubble-tls
+                  hosts:
+                    - hubble.example.com
+        operator:
+          replicas: 1
+          rollOutPods: true
+        kubeProxyReplacement: "partial"
+        k8sServiceHost: "{{ .Values.k8sServiceHost }}"
+        k8sServicePort: "{{ .Values.k8sServicePort }}"
+        loadBalancer:
+          algorithm: maglev
+        bpf:
+          masquerade: true
+        ipv4:
+          enabled: true
+        ipv6:
+          enabled: false
+        prometheus:
+          enabled: true
+          serviceMonitor:
+            enabled: true
+        dashboards:
+          enabled: true
+  destination:
+    server: https://kubernetes-openstack.example.com
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+  syncWave: 0  # Deploy CNI early
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: istio-system
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: istio
+    component: service-mesh
+spec:
+  project: hybrid-cloud-platform
+  source:
+    repoURL: https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+    targetRevision: main
+    path: kubernetes/networking/istio
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes-openstack.example.com
+    namespace: istio-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  syncWave: 1  # Deploy service mesh after CNI

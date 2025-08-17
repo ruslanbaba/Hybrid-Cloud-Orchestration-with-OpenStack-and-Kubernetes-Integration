@@ -1,0 +1,270 @@
+---
+# OpenStack-Ansible User Configuration
+# This file defines the OpenStack environment configuration
+
+cidr_networks:
+  management: "10.0.1.0/24"
+  tunnel: "10.0.2.0/24"
+  storage: "10.0.3.0/24"
+
+used_ips:
+  - "10.0.1.1,10.0.1.50"
+  - "10.0.2.1,10.0.2.50"
+  - "10.0.3.1,10.0.3.50"
+
+global_overrides:
+  # Internal VIP address for load balancing
+  internal_lb_vip_address: "10.0.1.100"
+  external_lb_vip_address: "{{ hostvars[groups['haproxy'][0]]['ansible_host'] }}"
+  
+  # Management network configuration
+  management_bridge: "br-mgmt"
+  
+  # Provider network configuration
+  provider_networks:
+    - network:
+        container_bridge: "br-mgmt"
+        container_type: "veth"
+        container_interface: "eth1"
+        ip_from_q: "management"
+        type: "raw"
+        group_binds:
+          - all_containers
+          - hosts
+        is_container_address: true
+    - network:
+        container_bridge: "br-vxlan"
+        container_type: "veth"
+        container_interface: "eth10"
+        ip_from_q: "tunnel"
+        type: "vxlan"
+        range: "1:1000"
+        net_name: "vxlan"
+        group_binds:
+          - neutron_linuxbridge_agent
+    - network:
+        container_bridge: "br-vlan"
+        container_type: "veth"
+        container_interface: "eth12"
+        host_bind_override: "eth12"
+        type: "flat"
+        net_name: "flat"
+        group_binds:
+          - neutron_linuxbridge_agent
+    - network:
+        container_bridge: "br-vlan"
+        container_type: "veth"
+        container_interface: "eth11"
+        type: "vlan"
+        range: "101:200,301:400"
+        net_name: "vlan"
+        group_binds:
+          - neutron_linuxbridge_agent
+    - network:
+        container_bridge: "br-storage"
+        container_type: "veth"
+        container_interface: "eth2"
+        ip_from_q: "storage"
+        type: "raw"
+        group_binds:
+          - glance_api
+          - cinder_api
+          - cinder_volume
+          - nova_compute
+          - swift_proxy
+
+# Shared infrastructure
+shared-infra_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Repository servers
+repo-infra_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+
+# Load balancers
+haproxy_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Identity (Keystone)
+identity_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Compute (Nova)
+compute_hosts:
+  compute-1:
+    ip: "10.0.1.20"
+  compute-2:
+    ip: "10.0.1.21"
+
+# Orchestration (Heat)
+orchestration_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Image (Glance)
+image_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Block Storage (Cinder)
+storage-infra_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+storage_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+    container_vars:
+      cinder_backends:
+        limit_container_types: cinder_volume
+        lvm:
+          volume_group: cinder-volumes
+          volume_driver: cinder.volume.drivers.lvm.LVMVolumeDriver
+          volume_backend_name: LVM_iSCSI
+          iscsi_ip_address: "10.0.3.10"
+  controller-2:
+    ip: "10.0.1.11"
+    container_vars:
+      cinder_backends:
+        limit_container_types: cinder_volume
+        lvm:
+          volume_group: cinder-volumes
+          volume_driver: cinder.volume.drivers.lvm.LVMVolumeDriver
+          volume_backend_name: LVM_iSCSI
+          iscsi_ip_address: "10.0.3.11"
+  controller-3:
+    ip: "10.0.1.12"
+    container_vars:
+      cinder_backends:
+        limit_container_types: cinder_volume
+        lvm:
+          volume_group: cinder-volumes
+          volume_driver: cinder.volume.drivers.lvm.LVMVolumeDriver
+          volume_backend_name: LVM_iSCSI
+          iscsi_ip_address: "10.0.3.12"
+
+# Network (Neutron)
+network_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Compute network agents
+compute-infra_hosts:
+  compute-1:
+    ip: "10.0.1.20"
+  compute-2:
+    ip: "10.0.1.21"
+
+# Container Orchestration (Magnum)
+magnum_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Load Balancing (Octavia)
+octavia-infra_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+octavia_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Dashboard (Horizon)
+horizon_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Metrics (Gnocchi)
+metrics_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Alarming (Aodh)
+alarm_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+# Telemetry (Ceilometer)
+metering-infra_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"
+
+metering-compute_hosts:
+  compute-1:
+    ip: "10.0.1.20"
+  compute-2:
+    ip: "10.0.1.21"
+
+# DNS (Designate) - Optional
+dnsaas_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+
+# Barbican (Key Management) - Optional
+key-manager_hosts:
+  controller-1:
+    ip: "10.0.1.10"
+  controller-2:
+    ip: "10.0.1.11"
+  controller-3:
+    ip: "10.0.1.12"

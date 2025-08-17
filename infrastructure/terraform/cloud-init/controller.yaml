@@ -1,0 +1,189 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${hostname}.openstack.local
+
+# Update system packages
+package_update: true
+package_upgrade: true
+
+packages:
+  - python3
+  - python3-pip
+  - python3-venv
+  - git
+  - curl
+  - wget
+  - htop
+  - vim
+  - tmux
+  - jq
+  - docker.io
+  - docker-compose
+  - bridge-utils
+  - vlan
+  - chrony
+  - ceph-common
+  - open-iscsi
+  - lvm2
+
+# Configure Docker
+runcmd:
+  # Enable and start Docker
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ubuntu
+  
+  # Configure chrony for time synchronization
+  - systemctl enable chrony
+  - systemctl start chrony
+  
+  # Configure network interfaces
+  - echo "auto lo" >> /etc/network/interfaces
+  - echo "iface lo inet loopback" >> /etc/network/interfaces
+  
+  # Install additional Python packages
+  - pip3 install --upgrade pip
+  - pip3 install ansible
+  - pip3 install python-openstackclient
+  - pip3 install python-novaclient
+  - pip3 install python-neutronclient
+  - pip3 install python-cinderclient
+  - pip3 install python-glanceclient
+  - pip3 install python-keystoneclient
+  - pip3 install python-heatclient
+  
+  # Configure LVM for Cinder
+  - pvcreate /dev/vdb
+  - vgcreate cinder-volumes /dev/vdb
+  
+  # Set up OpenStack directories
+  - mkdir -p /etc/openstack
+  - mkdir -p /var/log/openstack
+  - mkdir -p /opt/openstack
+  
+  # Configure kernel modules for networking
+  - echo "br_netfilter" >> /etc/modules
+  - echo "overlay" >> /etc/modules
+  - modprobe br_netfilter
+  - modprobe overlay
+  
+  # Configure sysctl for Kubernetes/OpenStack
+  - echo "net.bridge.bridge-nf-call-iptables = 1" >> /etc/sysctl.conf
+  - echo "net.bridge.bridge-nf-call-ip6tables = 1" >> /etc/sysctl.conf
+  - echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+  - sysctl -p
+  
+  # Set hostname
+  - hostnamectl set-hostname ${hostname}
+  
+  # Configure hosts file
+  - echo "127.0.1.1 ${hostname}.openstack.local ${hostname}" >> /etc/hosts
+
+# Configure users
+users:
+  - name: openstack
+    groups: docker, sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC... # Add your public key here
+
+# Write configuration files
+write_files:
+  - path: /etc/environment
+    content: |
+      NODE_ROLE=controller
+      NODE_ID=${node_id}
+      ENVIRONMENT=${environment}
+      OPENSTACK_ROLE=controller
+    
+  - path: /etc/systemd/system/openstack-prepare.service
+    content: |
+      [Unit]
+      Description=OpenStack Node Preparation Service
+      After=network.target
+      
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/openstack/prepare-node.sh
+      RemainAfterExit=yes
+      
+      [Install]
+      WantedBy=multi-user.target
+    
+  - path: /opt/openstack/prepare-node.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      
+      # Log all output
+      exec > >(tee -a /var/log/openstack-prepare.log)
+      exec 2>&1
+      
+      echo "$(date): Starting OpenStack controller node preparation"
+      
+      # Update package cache
+      apt-get update
+      
+      # Install additional packages for OpenStack
+      apt-get install -y \
+        python3-dev \
+        libffi-dev \
+        gcc \
+        libssl-dev \
+        libxml2-dev \
+        libxslt-dev \
+        libjpeg-dev \
+        libpq-dev \
+        libffi-dev \
+        libssl-dev \
+        libxml2-dev \
+        libxslt-dev \
+        libjpeg-dev \
+        zlib1g-dev
+      
+      # Configure firewall rules for OpenStack services
+      ufw --force enable
+      
+      # OpenStack API ports
+      ufw allow 5000/tcp   # Keystone
+      ufw allow 8774/tcp   # Nova API
+      ufw allow 8775/tcp   # Nova metadata
+      ufw allow 9292/tcp   # Glance API
+      ufw allow 9696/tcp   # Neutron API
+      ufw allow 8776/tcp   # Cinder API
+      ufw allow 8004/tcp   # Heat API
+      ufw allow 8000/tcp   # Heat CloudFormation
+      ufw allow 8003/tcp   # Heat CloudWatch
+      ufw allow 9511/tcp   # Magnum API
+      ufw allow 9876/tcp   # Octavia API
+      
+      # Database and messaging
+      ufw allow 3306/tcp   # MySQL
+      ufw allow 5672/tcp   # RabbitMQ
+      ufw allow 11211/tcp  # Memcached
+      
+      # Web services
+      ufw allow 80/tcp     # HTTP
+      ufw allow 443/tcp    # HTTPS
+      
+      # SSH
+      ufw allow 22/tcp
+      
+      # Configure chrony
+      cat > /etc/chrony/chrony.conf << EOF
+      pool 2.pool.ntp.org iburst
+      driftfile /var/lib/chrony/drift
+      makestep 1.0 3
+      rtcsync
+      allow 10.0.0.0/8
+      EOF
+      
+      systemctl restart chrony
+      
+      echo "$(date): OpenStack controller node preparation completed"
+
+# Enable services
+bootcmd:
+  - systemctl enable openstack-prepare.service

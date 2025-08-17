@@ -1,0 +1,434 @@
+---
+# Enterprise Hybrid Cloud Orchestration - Dynamic Inventory Configuration
+# This file defines the OpenStack-Ansible inventory structure for production deployment
+
+# ========================================
+# INFRASTRUCTURE HOSTS
+# ========================================
+
+# Deployment and utility hosts
+deployment_hosts:
+  deploy-01:
+    ip: 10.0.1.10
+    ansible_host: 10.0.1.10
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: ~/.ssh/openstack_deploy_key
+
+# ========================================
+# CONTROL PLANE HOSTS
+# ========================================
+
+# Load balancer hosts (HAProxy + Keepalived)
+haproxy_hosts:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+    haproxy_backup: false
+    haproxy_state: MASTER
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+    haproxy_backup: true
+    haproxy_state: BACKUP
+  infra-03:
+    ip: 10.0.1.13
+    ansible_host: 10.0.1.13
+    haproxy_backup: true
+    haproxy_state: BACKUP
+
+# Database cluster hosts (MariaDB Galera)
+galera_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+    galera_cluster_member: true
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+    galera_cluster_member: true
+  infra-03:
+    ip: 10.0.1.13
+    ansible_host: 10.0.1.13
+    galera_cluster_member: true
+
+# Message queue hosts (RabbitMQ)
+rabbitmq_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+    rabbitmq_nodename: rabbit01
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+    rabbitmq_nodename: rabbit02
+  infra-03:
+    ip: 10.0.1.13
+    ansible_host: 10.0.1.13
+    rabbitmq_nodename: rabbit03
+
+# Cache hosts (Memcached)
+memcached_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+  infra-03:
+    ip: 10.0.1.13
+    ansible_host: 10.0.1.13
+
+# ========================================
+# OPENSTACK API SERVICES
+# ========================================
+
+# Identity service (Keystone)
+keystone_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+  infra-03:
+    ip: 10.0.1.13
+    ansible_host: 10.0.1.13
+
+# Image service (Glance)
+glance_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Block storage API (Cinder)
+cinder_api:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Compute API (Nova)
+nova_api_metadata:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+nova_api_os_compute:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+nova_conductor:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+nova_scheduler:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+nova_console:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+
+# Placement API
+placement_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Networking service (Neutron)
+neutron_server:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Dashboard (Horizon)
+horizon_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Orchestration service (Heat)
+heat_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Load balancer service (Octavia)
+octavia_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# Container orchestration service (Magnum)
+magnum_all:
+  infra-01:
+    ip: 10.0.1.11
+    ansible_host: 10.0.1.11
+  infra-02:
+    ip: 10.0.1.12
+    ansible_host: 10.0.1.12
+
+# ========================================
+# COMPUTE HOSTS
+# ========================================
+
+# Hypervisor hosts
+compute_hosts:
+  compute-01:
+    ip: 10.0.2.11
+    ansible_host: 10.0.2.11
+    host_type: compute
+    nova_virt_type: kvm
+    nova_cpu_allocation_ratio: 4.0
+    nova_ram_allocation_ratio: 1.0
+  compute-02:
+    ip: 10.0.2.12
+    ansible_host: 10.0.2.12
+    host_type: compute
+    nova_virt_type: kvm
+    nova_cpu_allocation_ratio: 4.0
+    nova_ram_allocation_ratio: 1.0
+  compute-03:
+    ip: 10.0.2.13
+    ansible_host: 10.0.2.13
+    host_type: compute
+    nova_virt_type: kvm
+    nova_cpu_allocation_ratio: 4.0
+    nova_ram_allocation_ratio: 1.0
+
+# ========================================
+# NETWORK HOSTS
+# ========================================
+
+# Network nodes (Neutron agents)
+network_hosts:
+  network-01:
+    ip: 10.0.3.11
+    ansible_host: 10.0.3.11
+    host_type: network
+  network-02:
+    ip: 10.0.3.12
+    ansible_host: 10.0.3.12
+    host_type: network
+  network-03:
+    ip: 10.0.3.13
+    ansible_host: 10.0.3.13
+    host_type: network
+
+# ========================================
+# STORAGE HOSTS
+# ========================================
+
+# Block storage hosts (Cinder volumes)
+storage_hosts:
+  storage-01:
+    ip: 10.0.4.11
+    ansible_host: 10.0.4.11
+    host_type: storage
+    cinder_backends:
+      lvm:
+        volume_driver: cinder.volume.drivers.lvm.LVMVolumeDriver
+        volume_group: cinder-volumes
+        volume_backend_name: lvm
+  storage-02:
+    ip: 10.0.4.12
+    ansible_host: 10.0.4.12
+    host_type: storage
+    cinder_backends:
+      lvm:
+        volume_driver: cinder.volume.drivers.lvm.LVMVolumeDriver
+        volume_group: cinder-volumes
+        volume_backend_name: lvm
+
+# Object storage hosts (Swift)
+swift_hosts:
+  swift-01:
+    ip: 10.0.5.11
+    ansible_host: 10.0.5.11
+    zone: 1
+    region: 1
+    swift_drives:
+      - name: sdb
+      - name: sdc
+      - name: sdd
+  swift-02:
+    ip: 10.0.5.12
+    ansible_host: 10.0.5.12
+    zone: 2
+    region: 1
+    swift_drives:
+      - name: sdb
+      - name: sdc
+      - name: sdd
+  swift-03:
+    ip: 10.0.5.13
+    ansible_host: 10.0.5.13
+    zone: 3
+    region: 1
+    swift_drives:
+      - name: sdb
+      - name: sdc
+      - name: sdd
+
+# ========================================
+# MONITORING AND LOGGING HOSTS
+# ========================================
+
+# Monitoring stack hosts
+monitoring_hosts:
+  monitor-01:
+    ip: 10.0.6.11
+    ansible_host: 10.0.6.11
+    services:
+      - prometheus
+      - grafana
+      - alertmanager
+  monitor-02:
+    ip: 10.0.6.12
+    ansible_host: 10.0.6.12
+    services:
+      - elasticsearch
+      - kibana
+      - logstash
+
+# ========================================
+# GROUP ASSIGNMENTS
+# ========================================
+
+# Nova compute service assignment
+nova_compute:
+  children:
+    compute_hosts:
+
+# Neutron agent assignments
+neutron_dhcp_agent:
+  children:
+    network_hosts:
+
+neutron_l3_agent:
+  children:
+    network_hosts:
+
+neutron_metadata_agent:
+  children:
+    network_hosts:
+
+neutron_openvswitch_agent:
+  children:
+    network_hosts:
+    compute_hosts:
+
+# Cinder volume assignment
+cinder_volume:
+  children:
+    storage_hosts:
+
+# Swift service assignments
+swift_proxy:
+  children:
+    infra_hosts:
+
+swift_acc:
+  children:
+    swift_hosts:
+
+swift_cont:
+  children:
+    swift_hosts:
+
+swift_obj:
+  children:
+    swift_hosts:
+
+# ========================================
+# INFRASTRUCTURE GROUP DEFINITIONS
+# ========================================
+
+infra_hosts:
+  children:
+    galera_all:
+    rabbitmq_all:
+    memcached_all:
+    keystone_all:
+    glance_all:
+    nova_api_metadata:
+    nova_api_os_compute:
+    nova_conductor:
+    nova_scheduler:
+    nova_console:
+    placement_all:
+    neutron_server:
+    horizon_all:
+    heat_all:
+    octavia_all:
+    magnum_all:
+
+openstack_all:
+  children:
+    infra_hosts:
+    compute_hosts:
+    network_hosts:
+    storage_hosts:
+
+# ========================================
+# GLOBAL VARIABLES
+# ========================================
+all:
+  vars:
+    # Network configuration
+    management_bridge: "br-mgmt"
+    provider_bridge: "br-provider"
+    
+    # VIP addresses
+    external_lb_vip_address: "192.168.1.100"
+    internal_lb_vip_address: "10.0.1.100"
+    
+    # SSH configuration
+    ansible_user: ubuntu
+    ansible_ssh_private_key_file: ~/.ssh/openstack_deploy_key
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    
+    # Container configuration
+    lxc_container_backing_store: lvm
+    lxc_container_fs_type: ext4
+    lxc_container_fs_size: 5G
+    
+    # Security
+    ansible_become: true
+    ansible_become_method: sudo

@@ -1,0 +1,228 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: hybrid-cloud-platform
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: hybrid-cloud-platform
+    tier: platform
+spec:
+  description: "Platform components for hybrid cloud orchestration"
+  sourceRepos:
+  - https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+  - https://helm.cilium.io/
+  - https://istio-release.storage.googleapis.com/charts
+  - https://prometheus-community.github.io/helm-charts
+  - https://grafana.github.io/helm-charts
+  - https://charts.jetstack.io
+  - https://kubernetes.github.io/ingress-nginx
+  - https://argoproj.github.io/argo-helm
+  destinations:
+  - namespace: 'kube-system'
+    server: '*'
+  - namespace: 'istio-system'
+    server: '*'
+  - namespace: 'monitoring'
+    server: '*'
+  - namespace: 'gatekeeper-system'
+    server: '*'
+  - namespace: 'cert-manager'
+    server: '*'
+  - namespace: 'ingress-nginx'
+    server: '*'
+  - namespace: 'metallb-system'
+    server: '*'
+  - namespace: 'argocd'
+    server: '*'
+  clusterResourceWhitelist:
+  - group: ''
+    kind: Namespace
+  - group: ''
+    kind: ClusterRole
+  - group: ''
+    kind: ClusterRoleBinding
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRole
+  - group: 'rbac.authorization.k8s.io'
+    kind: ClusterRoleBinding
+  - group: 'apiextensions.k8s.io'
+    kind: CustomResourceDefinition
+  - group: 'admissionregistration.k8s.io'
+    kind: MutatingAdmissionWebhook
+  - group: 'admissionregistration.k8s.io'
+    kind: ValidatingAdmissionWebhook
+  - group: 'networking.k8s.io'
+    kind: NetworkPolicy
+  - group: 'policy'
+    kind: PodSecurityPolicy
+  - group: 'security.istio.io'
+    kind: PeerAuthentication
+  - group: 'security.istio.io'
+    kind: AuthorizationPolicy
+  - group: 'config.gatekeeper.sh'
+    kind: Config
+  - group: 'templates.gatekeeper.sh'
+    kind: ConstraintTemplate
+  - group: 'storage.k8s.io'
+    kind: StorageClass
+  - group: 'snapshot.storage.k8s.io'
+    kind: VolumeSnapshotClass
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: '*'
+  - group: 'apps'
+    kind: '*'
+  - group: 'extensions'
+    kind: '*'
+  - group: 'networking.k8s.io'
+    kind: '*'
+  - group: 'policy'
+    kind: '*'
+  - group: 'autoscaling'
+    kind: '*'
+  - group: 'batch'
+    kind: '*'
+  - group: 'metrics.k8s.io'
+    kind: '*'
+  - group: 'monitoring.coreos.com'
+    kind: '*'
+  - group: 'istio.io'
+    kind: '*'
+  - group: 'networking.istio.io'
+    kind: '*'
+  - group: 'security.istio.io'
+    kind: '*'
+  - group: 'telemetry.istio.io'
+    kind: '*'
+  - group: 'cert-manager.io'
+    kind: '*'
+  - group: 'acme.cert-manager.io'
+    kind: '*'
+  roles:
+  - name: platform-admin
+    description: "Full access to platform components"
+    policies:
+    - p, proj:hybrid-cloud-platform:platform-admin, applications, *, hybrid-cloud-platform/*, allow
+    - p, proj:hybrid-cloud-platform:platform-admin, repositories, *, *, allow
+    - p, proj:hybrid-cloud-platform:platform-admin, clusters, *, *, allow
+    groups:
+    - hybrid-cloud:platform-admins
+  - name: platform-developer
+    description: "Read-only access to platform components"
+    policies:
+    - p, proj:hybrid-cloud-platform:platform-developer, applications, get, hybrid-cloud-platform/*, allow
+    - p, proj:hybrid-cloud-platform:platform-developer, repositories, get, *, allow
+    - p, proj:hybrid-cloud-platform:platform-developer, clusters, get, *, allow
+    groups:
+    - hybrid-cloud:platform-developers
+  orphanedResources:
+    warn: true
+    ignore:
+    - group: ''
+      kind: Secret
+      name: '*-token-*'
+    - group: ''
+      kind: ConfigMap
+      name: 'kube-root-ca.crt'
+  signatureKeys:
+  - keyID: 12345ABCDE
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: hybrid-cloud-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: hybrid-cloud-apps
+    tier: application
+spec:
+  description: "Application workloads for hybrid cloud deployment"
+  sourceRepos:
+  - https://github.com/ruslanbaba/Hybrid-Cloud-Orchestration-with-OpenStack-and-Kubernetes-Integration
+  - https://charts.bitnami.com/bitnami
+  - https://helm.elastic.co
+  - https://charts.gitlab.io
+  destinations:
+  - namespace: 'sock-shop'
+    server: '*'
+  - namespace: 'default'
+    server: '*'
+  - namespace: 'production'
+    server: '*'
+  - namespace: 'staging'
+    server: '*'
+  - namespace: 'development'
+    server: '*'
+  clusterResourceWhitelist: []  # Applications should not create cluster resources
+  namespaceResourceWhitelist:
+  - group: ''
+    kind: '*'
+  - group: 'apps'
+    kind: '*'
+  - group: 'extensions'
+    kind: '*'
+  - group: 'networking.k8s.io'
+    kind: '*'
+  - group: 'policy'
+    kind: '*'
+  - group: 'autoscaling'
+    kind: '*'
+  - group: 'batch'
+    kind: '*'
+  - group: 'istio.io'
+    kind: '*'
+  - group: 'networking.istio.io'
+    kind: '*'
+  - group: 'security.istio.io'
+    kind: '*'
+  roles:
+  - name: app-admin
+    description: "Full access to application workloads"
+    policies:
+    - p, proj:hybrid-cloud-apps:app-admin, applications, *, hybrid-cloud-apps/*, allow
+    - p, proj:hybrid-cloud-apps:app-admin, repositories, get, *, allow
+    - p, proj:hybrid-cloud-apps:app-admin, clusters, get, *, allow
+    groups:
+    - hybrid-cloud:app-admins
+  - name: app-developer
+    description: "Developer access to applications"
+    policies:
+    - p, proj:hybrid-cloud-apps:app-developer, applications, create, hybrid-cloud-apps/*, allow
+    - p, proj:hybrid-cloud-apps:app-developer, applications, update, hybrid-cloud-apps/*, allow
+    - p, proj:hybrid-cloud-apps:app-developer, applications, sync, hybrid-cloud-apps/*, allow
+    - p, proj:hybrid-cloud-apps:app-developer, applications, get, hybrid-cloud-apps/*, allow
+    - p, proj:hybrid-cloud-apps:app-developer, repositories, get, *, allow
+    - p, proj:hybrid-cloud-apps:app-developer, clusters, get, *, allow
+    groups:
+    - hybrid-cloud:app-developers
+  - name: app-viewer
+    description: "Read-only access to applications"
+    policies:
+    - p, proj:hybrid-cloud-apps:app-viewer, applications, get, hybrid-cloud-apps/*, allow
+    - p, proj:hybrid-cloud-apps:app-viewer, repositories, get, *, allow
+    groups:
+    - hybrid-cloud:app-viewers
+  orphanedResources:
+    warn: true
+    ignore:
+    - group: ''
+      kind: Secret
+      name: '*-token-*'
+    - group: ''
+      kind: ConfigMap
+      name: 'kube-root-ca.crt'
+  syncWindows:
+  - kind: allow
+    schedule: '0 8 * * 1-5'  # Monday to Friday, 8 AM
+    duration: 8h
+    applications:
+    - '*'
+    manualSync: true
+  - kind: deny
+    schedule: '0 17 * * 5'   # Friday, 5 PM
+    duration: 60h
+    applications:
+    - '*'
+    manualSync: false
+  signatureKeys:
+  - keyID: 12345ABCDE

@@ -1,0 +1,650 @@
+---
+# Enterprise Hybrid Cloud Orchestration - Global Configuration
+# OpenStack-Ansible deployment configuration for production environment
+# Updated: August 2025
+
+# ========================================
+# DEPLOYMENT CONFIGURATION
+# ========================================
+deployment_environment_type: production
+openstack_release: "2023.2"  # Latest stable release
+container_tech: "lxc"
+install_method: source
+
+# Deployment optimization
+openstack_deployment_type: aio  # Can be changed to multinode
+deployment_logging_enabled: true
+deployment_host_key_checking: false
+
+# ========================================
+# ENTERPRISE SECURITY CONFIGURATION
+# ========================================
+apply_security_hardening: true
+security_rhel7_enable_linux_security_module: true
+security_rhel7_initialize_aide: true
+security_package_clean_on_target: true
+
+# Enhanced security features
+security_hardening_enabled: true
+security_audit_enabled: true
+security_compliance_mode: "stig"  # Security Technical Implementation Guide
+security_password_complexity: true
+security_ssh_hardening: true
+security_firewall_enabled: true
+
+# SELinux/AppArmor configuration
+security_selinux_state: enforcing
+security_apparmor_enabled: true
+
+# Vulnerability scanning
+security_vulnerability_scanning: true
+security_cve_scanning_enabled: true
+
+# ========================================
+# SSL/TLS AND ENCRYPTION CONFIGURATION
+# ========================================
+openstack_service_setup_host_python_interpreter: "{{ openstack_service_setup_host_python_interpreter | default('/usr/bin/python3') }}"
+
+# Enterprise SSL/TLS configuration
+ssl_protocol_version: "TLSv1.2"
+ssl_cipher_suite: "ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:!aNULL:!MD5:!DSS"
+ssl_certificate_validity_days: 365
+ssl_key_size: 4096
+
+# HAProxy SSL configuration
+haproxy_ssl: true
+haproxy_ssl_self_signed_regen: false
+haproxy_ssl_cert_path: "/etc/ssl/certs"
+haproxy_ssl_key_path: "/etc/ssl/private"
+haproxy_ssl_ca_cert: "/etc/ssl/certs/ca-certificates.crt"
+
+# SSL certificate management
+ssl_cert_auto_renewal: true
+ssl_cert_monitoring: true
+
+# ========================================
+# LOAD BALANCER CONFIGURATION
+# ========================================
+haproxy_keepalived_external_vip_cidr: "{{ external_lb_vip_address }}/32"
+haproxy_keepalived_internal_vip_cidr: "{{ internal_lb_vip_address }}/32"
+haproxy_keepalived_external_interface: "{{ ansible_default_ipv4.interface }}"
+haproxy_keepalived_internal_interface: "br-mgmt"
+
+# Enhanced load balancer settings
+haproxy_stats_enabled: true
+haproxy_stats_port: 8404
+haproxy_stats_uri: "/stats"
+haproxy_stats_user: "admin"
+haproxy_stats_password: "{{ vault_haproxy_stats_password }}"
+
+# Load balancer health checks
+haproxy_health_check_enabled: true
+haproxy_health_check_interval: "5s"
+haproxy_health_check_timeout: "3s"
+
+# High availability configuration
+haproxy_keepalived_vrid: 100
+haproxy_keepalived_priority: 100
+haproxy_keepalived_authentication_password: "{{ vault_keepalived_auth_password }}"
+
+# ========================================
+# DATABASE CONFIGURATION (MariaDB/Galera)
+# ========================================
+galera_cluster_name: openstack_hybrid_cloud
+galera_monitoring_allowed_source: "0.0.0.0/0"
+galera_root_password: "{{ vault_galera_root_password }}"
+galera_clustercheck_password: "{{ vault_galera_clustercheck_password }}"
+
+# Enhanced database configuration
+galera_cluster_members: >-
+  {% for host in groups['galera_all'] %}
+  {{ hostvars[host]['ansible_host'] }}
+  {%- if not loop.last %},{% endif %}
+  {% endfor %}
+
+# Database performance tuning
+galera_innodb_buffer_pool_size: "{{ (ansible_memtotal_mb * 0.7) | int }}M"
+galera_max_connections: 10000
+galera_thread_cache_size: 50
+galera_query_cache_size: "256M"
+galera_query_cache_type: 1
+
+# Database backup configuration
+galera_backup_enabled: true
+galera_backup_schedule: "0 2 * * *"  # Daily at 2 AM
+galera_backup_retention_days: 30
+
+# Database monitoring
+galera_monitoring_enabled: true
+galera_slow_query_log: true
+galera_slow_query_time: 2
+
+# ========================================
+# MESSAGE QUEUE CONFIGURATION (RabbitMQ)
+# ========================================
+rabbitmq_cluster_name: openstack_hybrid_cloud
+rabbitmq_use_ssl: true
+rabbitmq_user_ssl_cert: /etc/openstack_deploy/ssl/rabbitmq-cert.pem
+rabbitmq_user_ssl_key: /etc/openstack_deploy/ssl/rabbitmq-key.pem
+rabbitmq_user_ssl_ca_cert: /etc/openstack_deploy/ssl/rabbitmq-ca.pem
+
+# Enhanced RabbitMQ configuration
+rabbitmq_port: 5672
+rabbitmq_management_port: 15672
+rabbitmq_ssl_port: 5671
+
+# RabbitMQ performance tuning
+rabbitmq_vm_memory_high_watermark: 0.6
+rabbitmq_disk_free_limit: "2GB"
+rabbitmq_heartbeat: 60
+rabbitmq_frame_max: 131072
+
+# RabbitMQ high availability
+rabbitmq_cluster_partition_handling: "autoheal"
+rabbitmq_ha_policy: "all"
+rabbitmq_ha_sync_mode: "automatic"
+
+# RabbitMQ monitoring
+rabbitmq_monitoring_enabled: true
+rabbitmq_prometheus_plugin: true
+
+# ========================================
+# CACHING CONFIGURATION (Memcached)
+# ========================================
+memcached_listen: "{{ hostvars[inventory_hostname]['ansible_' + hostvars[inventory_hostname]['container_networks']['management_address']['bridge']]['ipv4']['address'] }}"
+memcached_port: 11211
+memcached_memory_limit: 1024  # MB
+memcached_max_connections: 2048
+memcached_growth_factor: 1.25
+
+memcached_servers: >-
+  {% for host in groups['memcached'] %}
+  {{ hostvars[host]['ansible_' + hostvars[host]['container_networks']['management_address']['bridge']]['ipv4']['address'] }}:{{ memcached_port }}
+  {%- if not loop.last %},{% endif %}
+  {% endfor %}
+
+# Redis configuration for session storage
+redis_enabled: true
+redis_port: 6379
+redis_maxmemory: "1gb"
+redis_maxmemory_policy: "allkeys-lru"
+redis_persistence_enabled: true
+
+# ========================================
+# IDENTITY SERVICE CONFIGURATION (Keystone)
+# ========================================
+keystone_auth_admin_password: "{{ vault_keystone_auth_admin_password }}"
+keystone_database_password: "{{ vault_keystone_database_password }}"
+keystone_service_password: "{{ vault_keystone_service_password }}"
+keystone_rabbitmq_password: "{{ vault_keystone_rabbitmq_password }}"
+
+# Enhanced Keystone configuration
+keystone_admin_user: "admin"
+keystone_admin_tenant: "admin"
+keystone_service_tenant: "service"
+
+# Multi-factor authentication
+keystone_mfa_enabled: true
+keystone_mfa_rules:
+  - user_type: "admin"
+    methods: ["password", "totp"]
+  - user_type: "user"
+    methods: ["password"]
+
+# Identity federation configuration
+keystone_federation_enabled: true
+keystone_idp:
+  name: "keystone-idp"
+  entity_id: "{{ keystone_service_publicuri_v3 }}/v3/OS-FEDERATION/saml2/idp"
+  sso_callback_template: "/etc/keystone/sso_callback_template.html"
+
+# SAML configuration
+keystone_sp:
+  - id: "keystone-sp"
+    auth_url: "{{ keystone_service_adminuri_v3 }}/v3/OS-FEDERATION/identity_providers/keystone-idp/protocols/saml2/auth"
+    sp_url: "{{ keystone_service_publicuri_v3 }}/v3/OS-FEDERATION/identity_providers/keystone-idp/protocols/saml2/auth"
+
+# Token configuration
+keystone_token_provider: "fernet"
+keystone_token_expiration: 43200  # 12 hours
+keystone_fernet_max_active_keys: 7
+keystone_fernet_key_rotation_interval: 86400  # 24 hours
+
+# Password policy
+keystone_password_policy:
+  enabled: true
+  minimum_password_age: 1
+  maximum_password_age: 90
+  minimum_password_length: 12
+  password_regex: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]"
+  lockout_failure_attempts: 5
+  lockout_duration: 300
+
+# ========================================
+# COMPUTE SERVICE CONFIGURATION (Nova)
+# ========================================
+nova_admin_password: "{{ vault_nova_admin_password }}"
+nova_database_password: "{{ vault_nova_database_password }}"
+nova_service_password: "{{ vault_nova_service_password }}"
+nova_rabbitmq_password: "{{ vault_nova_rabbitmq_password }}"
+
+# Enhanced Nova compute configuration
+nova_virt_type: kvm
+nova_cpu_allocation_ratio: 4.0
+nova_ram_allocation_ratio: 1.0
+nova_disk_allocation_ratio: 1.0
+
+# CPU and memory optimization
+nova_cpu_mode: "host-passthrough"
+nova_cpu_model: null
+nova_libvirt_cpu_mode: "host-passthrough"
+nova_libvirt_cpu_model: null
+
+# Resource allocation and limits
+nova_max_concurrent_builds: 10
+nova_max_concurrent_live_migrations: 1
+nova_block_migration_flag: "VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_NON_SHARED_INC"
+
+# Console and VNC configuration
+nova_console_type: novnc
+nova_console_ssl_dir: /etc/ssl/certs
+nova_console_ssl_cert: "{{ nova_console_ssl_dir }}/nova-console.pem"
+nova_console_ssl_key: "{{ nova_console_ssl_dir }}/nova-console.key"
+nova_novncproxy_base_url: "https://{{ external_lb_vip_address }}:6080/vnc_auto.html"
+
+# Enhanced console security
+nova_console_keymap: "en-us"
+nova_console_ssl_only: true
+nova_console_cert_bundle: "/etc/ssl/certs/ca-certificates.crt"
+
+# Scheduler configuration
+nova_scheduler_default_filters:
+  - "RetryFilter"
+  - "AvailabilityZoneFilter"
+  - "ComputeFilter"
+  - "ComputeCapabilitiesFilter"
+  - "ImagePropertiesFilter"
+  - "ServerGroupAntiAffinityFilter"
+  - "ServerGroupAffinityFilter"
+  - "PciPassthroughFilter"
+  - "NUMATopologyFilter"
+
+# Placement configuration
+nova_placement_enabled: true
+nova_placement_database_password: "{{ vault_nova_placement_database_password }}"
+
+# Hypervisor optimization
+nova_libvirt_inject_password: false
+nova_libvirt_inject_key: false
+nova_libvirt_inject_partition: -2
+
+# ========================================
+# NETWORKING SERVICE CONFIGURATION (Neutron)
+# ========================================
+neutron_admin_password: "{{ vault_neutron_admin_password }}"
+neutron_database_password: "{{ vault_neutron_database_password }}"
+neutron_service_password: "{{ vault_neutron_service_password }}"
+neutron_rabbitmq_password: "{{ vault_neutron_rabbitmq_password }}"
+
+# Enhanced Neutron networking configuration
+neutron_plugin_type: ml2.openvswitch  # Changed to OVS for better performance
+neutron_ml2_drivers_type: "geneve,vxlan,vlan,flat"
+neutron_ml2_drivers_extension: "port_security,qos,dns"
+
+# Advanced ML2 configuration
+neutron_ml2_mechanism_drivers: "openvswitch,l2population"
+neutron_ml2_tenant_network_types: "geneve,vxlan"
+neutron_ml2_type_drivers: "flat,vlan,geneve,vxlan"
+
+# Physical interface mappings for hybrid cloud
+neutron_provider_networks:
+  network_types: "geneve,vxlan,flat"
+  network_vxlan_ranges: "1:4094"
+  network_geneve_ranges: "1:65535"
+  network_mappings: "flat:eth12,provider:eth13"
+
+# OVS configuration
+neutron_ovs_bridge_mappings: "provider:br-provider"
+neutron_ovs_integration_bridge: "br-int"
+neutron_ovs_tunnel_bridge: "br-tun"
+
+# DVR and L3 HA for high availability
+neutron_neutron_conf_overrides:
+  DEFAULT:
+    router_distributed: True
+    l3_ha: True
+    max_l3_agents_per_router: 3
+    allow_overlapping_ips: True
+    core_plugin: ml2
+    service_plugins: "router,qos,trunk,segments,log"
+  agent:
+    tunnel_types: "geneve,vxlan"
+    l2_population: True
+    arp_responder: True
+    prevent_arp_spoofing: True
+
+# Advanced networking features
+neutron_l3_ha_net_cidr: "169.254.192.0/18"
+neutron_dhcp_agents_per_network: 3
+neutron_enable_distributed_routing: true
+
+# QoS configuration
+neutron_qos_enabled: true
+neutron_qos_drivers: "ovs"
+
+# Security groups optimization
+neutron_security_group_api: "neutron"
+neutron_firewall_driver: "neutron.agent.linux.iptables_firewall.OVSHybridIptablesFirewallDriver"
+
+# DPDK configuration (optional for high performance)
+neutron_dpdk_enabled: false
+neutron_dpdk_driver: "uio_pci_generic"
+
+# Glance configuration
+glance_admin_password: "{{ vault_glance_admin_password }}"
+glance_database_password: "{{ vault_glance_database_password }}"
+glance_service_password: "{{ vault_glance_service_password }}"
+glance_rabbitmq_password: "{{ vault_glance_rabbitmq_password }}"
+
+# Glance storage backend
+glance_default_store: file
+glance_additional_stores:
+  - file
+  - http
+  - cinder
+
+# Enable Glance image cache
+glance_flavor: keystone
+glance_enable_cache: true
+glance_cache_size: 10737418240  # 10GB
+
+# Cinder configuration
+cinder_admin_password: "{{ vault_cinder_admin_password }}"
+cinder_database_password: "{{ vault_cinder_database_password }}"
+cinder_service_password: "{{ vault_cinder_service_password }}"
+cinder_rabbitmq_password: "{{ vault_cinder_rabbitmq_password }}"
+
+# Heat configuration
+heat_admin_password: "{{ vault_heat_admin_password }}"
+heat_database_password: "{{ vault_heat_database_password }}"
+heat_service_password: "{{ vault_heat_service_password }}"
+heat_rabbitmq_password: "{{ vault_heat_rabbitmq_password }}"
+
+# Heat orchestration
+heat_stack_domain_admin_password: "{{ vault_heat_stack_domain_admin_password }}"
+heat_auth_encryption_key: "{{ vault_heat_auth_encryption_key }}"
+
+# Horizon configuration
+horizon_secret_key: "{{ vault_horizon_secret_key }}"
+horizon_keystone_endpoint: "{{ keystone_service_adminuri }}"
+
+# Enable additional panels
+horizon_enable_blazar_ui: false
+horizon_enable_designate_ui: false
+horizon_enable_heat_ui: true
+horizon_enable_magnum_ui: true
+horizon_enable_manila_ui: false
+horizon_enable_murano_ui: false
+horizon_enable_neutron_lbaas_ui: true
+horizon_enable_octavia_ui: true
+horizon_enable_sahara_ui: false
+horizon_enable_swift_ui: false
+
+# ========================================
+# ENHANCED SERVICE CONFIGURATIONS
+# ========================================
+
+# Octavia Load Balancer configuration
+octavia_admin_password: "{{ vault_octavia_admin_password }}"
+octavia_database_password: "{{ vault_octavia_database_password }}"
+octavia_service_password: "{{ vault_octavia_service_password }}"
+octavia_rabbitmq_password: "{{ vault_octavia_rabbitmq_password }}"
+
+# Enhanced Octavia networking
+octavia_management_net_subnet_cidr: "172.16.0.0/24"
+octavia_amphora_flavor_id: "{{ octavia_amp_flavor_id }}"
+octavia_amphora_image_id: "{{ octavia_amp_image_id }}"
+
+# Octavia advanced features
+octavia_enable_anti_affinity: true
+octavia_spare_amphora_pool_size: 2
+octavia_loadbalancer_topology: "ACTIVE_STANDBY"
+octavia_amphora_driver: "amphora_haproxy_rest_driver"
+
+# Container orchestration with Magnum
+magnum_admin_password: "{{ vault_magnum_admin_password }}"
+magnum_database_password: "{{ vault_magnum_database_password }}"
+magnum_service_password: "{{ vault_magnum_service_password }}"
+magnum_rabbitmq_password: "{{ vault_magnum_rabbitmq_password }}"
+
+# Enhanced Magnum configuration for Kubernetes
+magnum_trustee_domain_admin_password: "{{ vault_magnum_trustee_domain_admin_password }}"
+magnum_default_docker_volume_type: "cinder"
+magnum_cluster_template_kubernetes_enabled: true
+magnum_cluster_template_swarm_enabled: false
+
+# Kubernetes cluster templates
+magnum_kubernetes_cluster_templates:
+  - name: "kubernetes-dev"
+    coe: "kubernetes"
+    flavor_id: "m1.medium"
+    master_flavor_id: "m1.large"
+    dns_nameserver: "8.8.8.8"
+    docker_volume_size: 20
+    external_network_id: "{{ neutron_provider_network_id }}"
+    fixed_network: "{{ neutron_tenant_network_id }}"
+    volume_driver: "cinder"
+    network_driver: "flannel"
+    labels:
+      kube_tag: "v1.28.2"
+      master_lb_enabled: "true"
+      auto_healing_enabled: "true"
+      auto_scaling_enabled: "true"
+      monitoring_enabled: "true"
+
+  - name: "kubernetes-prod"
+    coe: "kubernetes"
+    flavor_id: "m1.large"
+    master_flavor_id: "m1.xlarge"
+    dns_nameserver: "8.8.8.8"
+    docker_volume_size: 50
+    external_network_id: "{{ neutron_provider_network_id }}"
+    fixed_network: "{{ neutron_tenant_network_id }}"
+    volume_driver: "cinder"
+    network_driver: "calico"
+    labels:
+      kube_tag: "v1.28.2"
+      master_lb_enabled: "true"
+      auto_healing_enabled: "true"
+      auto_scaling_enabled: "true"
+      monitoring_enabled: "true"
+      admission_control_list: "NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota,DefaultStorageClass"
+
+# ========================================
+# ENTERPRISE LOGGING AND MONITORING
+# ========================================
+rsyslog_server_ssl: true
+rsyslog_client_ssl: true
+rsyslog_server_ssl_cert: /etc/ssl/certs/rsyslog-server.pem
+rsyslog_server_ssl_key: /etc/ssl/private/rsyslog-server.key
+rsyslog_server_ssl_ca_cert: /etc/ssl/certs/rsyslog-ca.pem
+
+# Enhanced logging configuration
+logging_enabled: true
+centralized_logging_enabled: true
+log_retention_days: 90
+log_rotation_enabled: true
+
+# ELK Stack integration
+elasticsearch_enabled: true
+elasticsearch_cluster_name: "openstack-logs"
+elasticsearch_heap_size: "2g"
+logstash_enabled: true
+kibana_enabled: true
+
+# Metrics and monitoring
+prometheus_enabled: true
+prometheus_retention_time: "30d"
+prometheus_storage_path: "/opt/prometheus/data"
+grafana_enabled: true
+grafana_admin_password: "{{ vault_grafana_admin_password }}"
+
+# Alerting configuration
+alertmanager_enabled: true
+alertmanager_webhook_configs:
+  - url: "http://localhost:5001/alerts"
+  - url: "{{ slack_webhook_url }}"
+
+# ========================================
+# HYBRID CLOUD INTEGRATION
+# ========================================
+
+# Multi-cloud provider configuration
+hybrid_cloud_enabled: true
+multi_cloud_providers:
+  - name: "aws"
+    type: "amazon_web_services"
+    enabled: true
+    region: "us-east-1"
+    credentials_file: "/etc/openstack_deploy/aws-credentials"
+  
+  - name: "gcp"
+    type: "google_cloud_platform"
+    enabled: true
+    region: "us-central1"
+    credentials_file: "/etc/openstack_deploy/gcp-credentials.json"
+  
+  - name: "azure"
+    type: "microsoft_azure"
+    enabled: true
+    region: "eastus"
+    credentials_file: "/etc/openstack_deploy/azure-credentials"
+
+# Cross-cloud networking
+hybrid_networking_enabled: true
+inter_cloud_vpn_enabled: true
+cloud_interconnect_bandwidth: "1Gbps"
+
+# Workload portability
+container_orchestration_enabled: true
+workload_migration_enabled: true
+disaster_recovery_enabled: true
+
+# ========================================
+# ADVANCED REPOSITORY AND PACKAGE MANAGEMENT
+# ========================================
+openstack_repo_git_folder: /opt/openstack-ansible-repo
+repo_build_pip_extra_packages:
+  - python3-dev
+  - build-essential
+  - python3-setuptools
+  - python3-wheel
+  - python3-pip
+
+# Enhanced pip configuration
+pip_install_upper_constraints: "{{ openstack_repo_url }}/upper-constraints.txt"
+pip_default_index_url: "https://pypi.org/simple/"
+pip_extra_index_url: "https://pypi.python.org/simple/"
+
+# Package caching and mirrors
+package_cache_enabled: true
+local_package_mirror: "http://{{ internal_lb_vip_address }}/repo"
+apt_cache_valid_time: 3600
+
+# ========================================
+# SERVICE ENDPOINTS CONFIGURATION
+# ========================================
+openstack_service_adminuri_proto: https
+openstack_service_adminuri_insecure: false
+openstack_service_publicuri_proto: https
+openstack_service_publicuri_insecure: false
+openstack_service_internaluri_proto: https
+openstack_service_internaluri_insecure: false
+
+# Enhanced endpoint configuration
+service_region: "RegionOne"
+keystone_service_region: "{{ service_region }}"
+endpoint_type: "public"
+
+# API versioning
+keystone_api_version: "v3"
+nova_api_version: "v2.1"
+neutron_api_version: "v2.0"
+cinder_api_version: "v3"
+glance_api_version: "v2"
+
+# ========================================
+# ENHANCED SERVICES ENABLEMENT
+# ========================================
+
+# Core services
+ceilometer_enabled: true
+aodh_enabled: true
+gnocchi_enabled: true
+barbican_enabled: true
+
+# Optional services for enterprise features
+designate_enabled: true  # DNS as a Service
+swift_enabled: true      # Object Storage
+manila_enabled: true     # Shared File Systems
+sahara_enabled: false    # Data Processing (Hadoop)
+murano_enabled: false    # Application Catalog
+trove_enabled: false     # Database as a Service
+ironic_enabled: false    # Bare Metal Provisioning
+
+# Backup and disaster recovery
+backup_enabled: true
+backup_driver: "cinder.backup.drivers.swift.SwiftBackupDriver"
+backup_compression_algorithm: "gzip"
+
+# Monitoring and alerting
+enable_central_logging: true
+enable_monitoring: true
+enable_alerting: true
+enable_metrics_collection: true
+
+# Security and compliance
+security_compliance_enabled: true
+audit_enabled: true
+vulnerability_scanning_enabled: true
+
+# Performance optimization
+performance_tuning_enabled: true
+numa_topology_enabled: true
+cpu_pinning_enabled: false
+hugepages_enabled: false
+
+# ========================================
+# CONTAINER AND VIRTUALIZATION
+# ========================================
+
+# Container runtime configuration
+container_runtime: "docker"
+container_registry: "registry.{{ external_lb_vip_address }}:5000"
+container_image_cache_enabled: true
+
+# Virtualization enhancements
+nested_virtualization_enabled: false
+sr_iov_enabled: false
+gpu_passthrough_enabled: false
+
+# ========================================
+# CUSTOM ENTERPRISE VARIABLES
+# ========================================
+
+# Organization specific
+organization_name: "Hybrid Cloud Enterprise"
+environment_tag: "production"
+cost_center: "IT-INFRASTRUCTURE"
+project_owner: "DevOps Team"
+
+# Compliance and governance
+compliance_framework: "SOC2"
+data_classification: "restricted"
+retention_policy: "7years"
+
+# Business continuity
+rpo_target: "4h"  # Recovery Point Objective
+rto_target: "2h"  # Recovery Time Objective
+backup_frequency: "daily"
+dr_testing_schedule: "quarterly"

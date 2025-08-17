@@ -1,0 +1,215 @@
+#cloud-config
+hostname: ${hostname}
+fqdn: ${hostname}.openstack.local
+
+# Update system packages
+package_update: true
+package_upgrade: true
+
+packages:
+  - python3
+  - python3-pip
+  - python3-venv
+  - git
+  - curl
+  - wget
+  - htop
+  - vim
+  - tmux
+  - jq
+  - docker.io
+  - docker-compose
+  - bridge-utils
+  - vlan
+  - chrony
+  - ceph-common
+  - open-iscsi
+  - lvm2
+  - qemu-kvm
+  - libvirt-daemon-system
+  - libvirt-clients
+  - virtinst
+  - openvswitch-switch
+
+# Configure Docker and virtualization
+runcmd:
+  # Enable and start Docker
+  - systemctl enable docker
+  - systemctl start docker
+  - usermod -aG docker ubuntu
+  
+  # Enable and configure libvirt
+  - systemctl enable libvirtd
+  - systemctl start libvirtd
+  - usermod -aG libvirt ubuntu
+  
+  # Enable and configure Open vSwitch
+  - systemctl enable openvswitch-switch
+  - systemctl start openvswitch-switch
+  
+  # Configure chrony for time synchronization
+  - systemctl enable chrony
+  - systemctl start chrony
+  
+  # Configure network interfaces
+  - echo "auto lo" >> /etc/network/interfaces
+  - echo "iface lo inet loopback" >> /etc/network/interfaces
+  
+  # Install additional Python packages
+  - pip3 install --upgrade pip
+  - pip3 install ansible
+  - pip3 install python-openstackclient
+  - pip3 install python-novaclient
+  - pip3 install python-neutronclient
+  - pip3 install python-cinderclient
+  - pip3 install python-glanceclient
+  
+  # Configure LVM for Nova instances and Cinder
+  - pvcreate /dev/vdb
+  - vgcreate nova-local /dev/vdb
+  
+  # Set up OpenStack directories
+  - mkdir -p /etc/openstack
+  - mkdir -p /var/log/openstack
+  - mkdir -p /opt/openstack
+  - mkdir -p /var/lib/nova/instances
+  
+  # Configure kernel modules for networking and virtualization
+  - echo "br_netfilter" >> /etc/modules
+  - echo "overlay" >> /etc/modules
+  - echo "kvm" >> /etc/modules
+  - echo "kvm_intel" >> /etc/modules
+  - modprobe br_netfilter
+  - modprobe overlay
+  - modprobe kvm
+  - modprobe kvm_intel
+  
+  # Configure sysctl for Kubernetes/OpenStack
+  - echo "net.bridge.bridge-nf-call-iptables = 1" >> /etc/sysctl.conf
+  - echo "net.bridge.bridge-nf-call-ip6tables = 1" >> /etc/sysctl.conf
+  - echo "net.ipv4.ip_forward = 1" >> /etc/sysctl.conf
+  - echo "net.ipv4.conf.all.rp_filter = 0" >> /etc/sysctl.conf
+  - echo "net.ipv4.conf.default.rp_filter = 0" >> /etc/sysctl.conf
+  - sysctl -p
+  
+  # Set hostname
+  - hostnamectl set-hostname ${hostname}
+  
+  # Configure hosts file
+  - echo "127.0.1.1 ${hostname}.openstack.local ${hostname}" >> /etc/hosts
+
+# Configure users
+users:
+  - name: openstack
+    groups: docker, sudo, libvirt, kvm
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC... # Add your public key here
+
+# Write configuration files
+write_files:
+  - path: /etc/environment
+    content: |
+      NODE_ROLE=compute
+      NODE_ID=${node_id}
+      ENVIRONMENT=${environment}
+      OPENSTACK_ROLE=compute
+    
+  - path: /etc/systemd/system/openstack-prepare.service
+    content: |
+      [Unit]
+      Description=OpenStack Compute Node Preparation Service
+      After=network.target libvirtd.service
+      
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/openstack/prepare-node.sh
+      RemainAfterExit=yes
+      
+      [Install]
+      WantedBy=multi-user.target
+    
+  - path: /opt/openstack/prepare-node.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      
+      # Log all output
+      exec > >(tee -a /var/log/openstack-prepare.log)
+      exec 2>&1
+      
+      echo "$(date): Starting OpenStack compute node preparation"
+      
+      # Update package cache
+      apt-get update
+      
+      # Install additional packages for OpenStack compute
+      apt-get install -y \
+        python3-dev \
+        libffi-dev \
+        gcc \
+        libssl-dev \
+        libxml2-dev \
+        libxslt-dev \
+        libjpeg-dev \
+        libpq-dev \
+        nova-compute \
+        neutron-linuxbridge-agent \
+        neutron-openvswitch-agent
+      
+      # Configure firewall rules for compute services
+      ufw --force enable
+      
+      # Nova compute services
+      ufw allow 5900:5999/tcp  # VNC consoles
+      ufw allow 16509/tcp      # libvirt
+      
+      # Neutron agent communication
+      ufw allow 4789/udp       # VXLAN
+      ufw allow from 10.0.0.0/8 to any port 22
+      
+      # SSH
+      ufw allow 22/tcp
+      
+      # Configure libvirt
+      cat > /etc/libvirt/libvirtd.conf << EOF
+      listen_tls = 0
+      listen_tcp = 1
+      tcp_port = "16509"
+      listen_addr = "0.0.0.0"
+      auth_tcp = "none"
+      EOF
+      
+      # Configure libvirt default settings
+      cat > /etc/default/libvirtd << EOF
+      LIBVIRTD_ARGS="--listen"
+      EOF
+      
+      # Configure chrony
+      cat > /etc/chrony/chrony.conf << EOF
+      pool 2.pool.ntp.org iburst
+      driftfile /var/lib/chrony/drift
+      makestep 1.0 3
+      rtcsync
+      EOF
+      
+      systemctl restart chrony
+      systemctl restart libvirtd
+      
+      # Configure CPU governor for performance
+      echo "performance" | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+      
+      # Configure huge pages if enough memory
+      TOTAL_MEM=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+      if [ $TOTAL_MEM -gt 8388608 ]; then  # More than 8GB
+        echo "vm.nr_hugepages = 1024" >> /etc/sysctl.conf
+        sysctl -p
+      fi
+      
+      echo "$(date): OpenStack compute node preparation completed"
+
+# Enable services
+bootcmd:
+  - systemctl enable openstack-prepare.service
