@@ -70,7 +70,7 @@ vault_heat_database_password: "HeatDB2025!"
 vault_heat_service_password: "HeatService2025!"
 vault_heat_rabbitmq_password: "HeatRabbitMQ2025!"
 vault_heat_stack_domain_admin_password: "HeatDomainAdmin2025!"
-vault_heat_auth_encryption_key: "HeatEncryptionKey32BytesLong2025!"
+vault_heat_auth_encryption_key: "{{ vault_encrypted_heat_auth_encryption_key }}"
 
 # ========================================
 # HORIZON (DASHBOARD) CREDENTIALS
@@ -214,7 +214,7 @@ vault_external_db_admin_password: "ExternalDBAdmin2025!"
 # ========================================
 # BACKUP STORAGE CREDENTIALS
 # ========================================
-vault_backup_encryption_key: "BackupEncryptionKey32BytesLong2025!"
+vault_backup_encryption_key: "{{ vault_encrypted_backup_encryption_key }}"
 vault_backup_storage_access_key: "AKIA1234567890BACKUP"
 vault_backup_storage_secret_key: "BackupStorageSecretKey2025!"
 
